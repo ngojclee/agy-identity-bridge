@@ -9,6 +9,43 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 )
 
+// ensureAuthRecord creates or updates the auth record for the plugin's own
+// provider key so CPA can route requests to this executor. Without it, CPA
+// fails with auth_not_found before the executor is ever reached.
+//
+// The auth JSON mirrors the provider's base_url and API key, but with type set
+// to the plugin's own provider key. CPA's buildAuthFromFileData reads type as
+// the Provider, which makes it discoverable by the executor selector.
+func ensureAuthRecord(spec providerSpec, settings PluginSettings) error {
+	if !settings.ExecutorEnabled {
+		return nil
+	}
+	if spec.upstreamBaseURL() == "" || spec.primaryAPIKey() == "" {
+		return fmt.Errorf("mirrored provider missing base_url or api_key, cannot create auth record")
+	}
+	authJSON, errMarshal := json.Marshal(map[string]any{
+		"type":     settings.ExecutorProvider,
+		"base_url": spec.upstreamBaseURL(),
+		"api_key":  spec.primaryAPIKey(),
+		"label":    "agy-identity-bridge executor",
+	})
+	if errMarshal != nil {
+		return fmt.Errorf("marshal auth record: %w", errMarshal)
+	}
+	saveRequest, errMarshal2 := json.Marshal(map[string]any{
+		"name": settings.ExecutorProvider + ".json",
+		"json": json.RawMessage(authJSON),
+	})
+	if errMarshal2 != nil {
+		return fmt.Errorf("marshal auth save request: %w", errMarshal2)
+	}
+	_, errCall := hostCall(pluginabi.MethodHostAuthSave, saveRequest)
+	if errCall != nil {
+		return fmt.Errorf("host.auth.save failed: %w", errCall)
+	}
+	return nil
+}
+
 // executorRequest mirrors pluginapi.ExecutorRequest plus the host callback id
 // CLIProxyAPI attaches to executor calls. The host decodes untagged Go fields,
 // so these keys are the Go field names.

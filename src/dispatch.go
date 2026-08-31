@@ -171,6 +171,21 @@ func configurePlugin(raw []byte) error {
 		"model_namespace":   settings.ModelNamespace,
 	})
 
+	if settings.ExecutorEnabled && mirrored {
+		if errAuth := ensureAuthRecord(spec, settings); errAuth != nil {
+			// Non-fatal: the plugin still registers and models still list.
+			// Without an auth record, requests routed to this executor will
+			// fail with auth_not_found, which the status page will show.
+			hostLog("warn", "auth record creation failed", map[string]any{
+				"error": errAuth.Error(),
+			})
+		} else {
+			hostLog("info", "auth record ensured", map[string]any{
+				"provider": settings.ExecutorProvider,
+			})
+		}
+	}
+
 	diagnostics := scanProviderDiagnostics()
 	hostLog("info", "provider discovery completed", map[string]any{
 		"config_path_found":        diagnostics.ConfigPathFound,
