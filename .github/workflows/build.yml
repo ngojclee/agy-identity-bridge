@@ -34,18 +34,14 @@ jobs:
       - name: Package
         run: |
           cd dist
+          VERSION="${GITHUB_REF_NAME#v}"
           sha256sum agy-identity-bridge.so > agy-identity-bridge.so.sha256
-          zip agy-identity-bridge_linux_amd64.zip agy-identity-bridge.so agy-identity-bridge.so.sha256
+          zip "agy-identity-bridge_${VERSION}_linux_amd64.zip" agy-identity-bridge.so agy-identity-bridge.so.sha256
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: agy-identity-bridge-linux
-          path: dist/agy-identity-bridge_linux_amd64.zip
-
-      - name: Create Release
+      - name: Upload to Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: dist/agy-identity-bridge_linux_amd64.zip
+          files: dist/agy-identity-bridge_*_linux_amd64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
