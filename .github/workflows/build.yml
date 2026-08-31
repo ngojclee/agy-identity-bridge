@@ -33,15 +33,20 @@ jobs:
 
       - name: Package
         run: |
-          cd dist
           VERSION="${GITHUB_REF_NAME#v}"
-          sha256sum agy-identity-bridge.so > agy-identity-bridge.so.sha256
-          zip "agy-identity-bridge_${VERSION}_linux_amd64.zip" agy-identity-bridge.so agy-identity-bridge.so.sha256
+          go run -buildvcs=false ./.github/scripts/package-release.go \
+            -library dist/agy-identity-bridge.so -entry agy-identity-bridge.so \
+            -archive "dist/agy-identity-bridge_${VERSION}_linux_amd64.zip" \
+            -checksum "dist/agy-identity-bridge_${VERSION}_linux_amd64.zip.sha256"
+          cp "dist/agy-identity-bridge_${VERSION}_linux_amd64.zip.sha256" dist/checksums.txt
 
       - name: Upload to Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: dist/agy-identity-bridge_*_linux_amd64.zip
+          files: |
+            dist/agy-identity-bridge_*_linux_amd64.zip
+            dist/agy-identity-bridge_*_linux_amd64.zip.sha256
+            dist/checksums.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
