@@ -23,10 +23,14 @@ type registration struct {
 }
 
 type registrationCapability struct {
-	RequestInterceptor bool `json:"request_interceptor"`
-	ManagementAPI      bool `json:"management_api"`
-	ModelRegistrar     bool `json:"model_registrar"`
-	ModelProvider      bool `json:"model_provider"`
+	RequestInterceptor    bool     `json:"request_interceptor"`
+	ManagementAPI         bool     `json:"management_api"`
+	ModelRegistrar        bool     `json:"model_registrar"`
+	ModelProvider         bool     `json:"model_provider"`
+	Executor              bool     `json:"executor"`
+	ExecutorModelScope    string   `json:"executor_model_scope,omitempty"`
+	ExecutorInputFormats  []string `json:"executor_input_formats,omitempty"`
+	ExecutorOutputFormats []string `json:"executor_output_formats,omitempty"`
 }
 
 type InterceptRequestPayload struct {
@@ -123,6 +127,14 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 		return handleModelStatic(), nil
 	case pluginabi.MethodModelForAuth:
 		return handleModelForAuth(request)
+	case pluginabi.MethodExecutorIdentifier:
+		return handleExecutorIdentifier(), nil
+	case pluginabi.MethodExecutorExecute:
+		return handleExecutorExecute(request)
+	case pluginabi.MethodExecutorExecuteStream:
+		return handleExecutorExecuteStream(request)
+	case pluginabi.MethodExecutorCountTokens:
+		return handleExecutorCountTokens(request)
 	case pluginabi.MethodManagementRegister:
 		return handleManagementRegister(), nil
 	case pluginabi.MethodManagementHandle:
@@ -279,6 +291,10 @@ func registrationCapabilities() registrationCapability {
 	if settings.ExecutorEnabled && mirrored && canServeModels(settings, spec) {
 		capabilities.ModelRegistrar = true
 		capabilities.ModelProvider = true
+		capabilities.Executor = true
+		capabilities.ExecutorModelScope = "both"
+		capabilities.ExecutorInputFormats = []string{"chat-completions", "openai-image"}
+		capabilities.ExecutorOutputFormats = []string{"chat-completions", "openai-image"}
 	}
 	return capabilities
 }
