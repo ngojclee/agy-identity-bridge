@@ -88,6 +88,44 @@ path pinned explicitly as well, which is the most precise option.
 `match_api_key` is a selector only. It is not silently reused as the HMAC
 secret.
 
+## Executor mode
+
+CLIProxyAPI's OpenAI-compatible executor builds its upstream request from
+scratch and never applies the headers an interceptor returned, so identity
+headers injected by this plugin cannot reach agy2api through that provider.
+Executor mode removes that limitation by making this plugin the caller.
+
+```yaml
+plugins:
+  configs:
+    agy-identity-bridge:
+      executor_enabled: true
+      executor_provider: agy-bridge
+      model_namespace: "spike."
+```
+
+The plugin mirrors the provider it matches in `openai-compatibility`: base URL,
+API keys, extra headers, priority, disable-cooling and the model list. Model
+metadata is mapped the same way the host does it, so alias wins over name,
+`image: true` becomes the `openai-image` type, and a chat model without explicit
+thinking still advertises `low`, `medium` and `high`. Nothing is invented: if the
+provider declares no models, the plugin publishes none.
+
+`executor_enabled` defaults to false, and installing a new plugin version does
+not change routing on its own.
+
+### Collision guard
+
+While the mirrored provider is still enabled, the plugin withholds its models
+unless `model_namespace` is set. Two providers publishing the same model ID would
+make CLIProxyAPI load balance across them, and the requests that land on the
+original provider silently lose their identity. The status endpoint reports
+`models_served` and warns while this is in effect.
+
+To finish the switch, disable the mirrored provider in CPA config and clear
+`model_namespace`. The plugin then publishes the exact model names clients
+already use.
+
 ## HMAC Secret
 
 The default source is the `AGY_PLUGIN_SECRET` environment variable:
@@ -176,19 +214,19 @@ Go 1.26 and GCC:
 
 ```sh
 make test
-make build VERSION=0.1.7
+make build VERSION=0.1.8
 ```
 
 The output is:
 
 ```text
-dist/agy-identity-bridge-v0.1.7.so
+dist/agy-identity-bridge-v0.1.8.so
 ```
 
 The GitHub Actions workflow builds and packages:
 
 ```text
-agy-identity-bridge_0.1.7_linux_amd64.zip
+agy-identity-bridge_0.1.8_linux_amd64.zip
 checksums.txt
 ```
 

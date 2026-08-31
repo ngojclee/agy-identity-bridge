@@ -34,6 +34,13 @@ type PluginSettings struct {
 	MatchModels              []string `yaml:"match_models" json:"match_models"`
 	HMACSecret               string   `yaml:"hmac_secret" json:"hmac_secret"`
 	HMACSecretSource         string   `yaml:"hmac_secret_source" json:"hmac_secret_source"`
+
+	// Executor mode makes this plugin the caller for the mirrored provider, so
+	// identity headers survive to agy2api. Disabled by default: installing a
+	// new plugin version must not change live routing until the owner opts in.
+	ExecutorEnabled  bool   `yaml:"executor_enabled" json:"executor_enabled"`
+	ExecutorProvider string `yaml:"executor_provider" json:"executor_provider"`
+	ModelNamespace   string `yaml:"model_namespace" json:"model_namespace"`
 }
 
 type pluginConfigSnapshot struct {
@@ -64,8 +71,14 @@ func defaultPluginSettings() PluginSettings {
 		IncludeNativeAntigravity: true,
 		MatchMode:                "any",
 		HMACSecretSource:         "env",
+		ExecutorProvider:         defaultExecutorProvider,
 	}
 }
+
+// defaultExecutorProvider is the plugin-owned provider key. It must not be a
+// key CLIProxyAPI already serves with a native executor, because the host skips
+// plugin executors in that case.
+const defaultExecutorProvider = "agy-bridge"
 
 func normalizeSettings(s PluginSettings) PluginSettings {
 	s.MatchMode = strings.ToLower(strings.TrimSpace(s.MatchMode))
@@ -119,7 +132,32 @@ func normalizeSettings(s PluginSettings) PluginSettings {
 		models = append(models, value)
 	}
 	s.MatchModels = models
+
+	s.ModelNamespace = strings.TrimSpace(s.ModelNamespace)
+	s.ExecutorProvider = normalizeProviderKey(s.ExecutorProvider)
+	if s.ExecutorProvider == "" {
+		s.ExecutorProvider = defaultExecutorProvider
+	}
 	return s
+}
+
+// normalizeProviderKey keeps a provider key usable in model routing: no
+// spaces, no path separators, lowercase.
+func normalizeProviderKey(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+	var builder strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+			builder.WriteRune(r)
+		case r == ' ' || r == '/' || r == '\\':
+			builder.WriteRune('-')
+		}
+	}
+	return strings.Trim(builder.String(), "-")
 }
 
 // decodePluginSettings is kept as a compatibility helper for tests and older
@@ -323,6 +361,9 @@ func findPluginConfig(root map[string]any) (map[string]any, bool) {
 		"match_models",
 		"hmac_secret",
 		"hmac_secret_source",
+		"executor_enabled",
+		"executor_provider",
+		"model_namespace",
 	} {
 		if _, ok := mapValue(root, key); ok {
 			return root, true
@@ -376,6 +417,15 @@ func settingsFromMap(base PluginSettings, raw map[string]any) PluginSettings {
 	}
 	if value, ok := stringValue(raw, "hmac_secret_source", "hmac-secret-source"); ok {
 		base.HMACSecretSource = value
+	}
+	if value, ok := boolValue(raw, "executor_enabled", "executor-enabled"); ok {
+		base.ExecutorEnabled = value
+	}
+	if value, ok := stringValue(raw, "executor_provider", "executor-provider"); ok {
+		base.ExecutorProvider = value
+	}
+	if value, ok := stringValue(raw, "model_namespace", "model-namespace"); ok {
+		base.ModelNamespace = value
 	}
 	return normalizeSettings(base)
 }

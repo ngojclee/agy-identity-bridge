@@ -25,6 +25,8 @@ type registration struct {
 type registrationCapability struct {
 	RequestInterceptor bool `json:"request_interceptor"`
 	ManagementAPI      bool `json:"management_api"`
+	ModelRegistrar     bool `json:"model_registrar"`
+	ModelProvider      bool `json:"model_provider"`
 }
 
 type InterceptRequestPayload struct {
@@ -115,6 +117,12 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 		return okEnvelope(pluginRegistration()), nil
 	case pluginabi.MethodRequestInterceptAfter:
 		return handleInterceptAfter(request)
+	case pluginabi.MethodModelRegister:
+		return handleModelRegister(), nil
+	case pluginabi.MethodModelStatic:
+		return handleModelStatic(), nil
+	case pluginabi.MethodModelForAuth:
+		return handleModelForAuth(request)
 	case pluginabi.MethodManagementRegister:
 		return handleManagementRegister(), nil
 	case pluginabi.MethodManagementHandle:
@@ -135,6 +143,21 @@ func configurePlugin(raw []byte) error {
 	}
 	snapshot := loadPluginConfiguration(request.ConfigYAML)
 	applyPluginConfiguration(snapshot)
+
+	// The mirrored provider record can change when CPA config changes, so the
+	// cache is dropped and rebuilt from the freshly loaded config.
+	storeProviderSpec(providerSpec{}, false)
+	spec, mirrored := resolveProviderSpec()
+	settings := currentPluginSettings()
+	hostLog("info", "provider mirror resolved", map[string]any{
+		"executor_provider": settings.ExecutorProvider,
+		"mirrored":          spec.Name,
+		"found":             mirrored,
+		"models":            len(spec.Models),
+		"has_api_key":       spec.primaryAPIKey() != "",
+		"executor_enabled":  settings.ExecutorEnabled,
+		"model_namespace":   settings.ModelNamespace,
+	})
 
 	diagnostics := scanProviderDiagnostics()
 	hostLog("info", "provider discovery completed", map[string]any{
@@ -222,13 +245,42 @@ func pluginRegistration() registration {
 					Type:        pluginapi.ConfigFieldTypeString,
 					Description: "Optional HMAC secret when hmac_secret_source is config. Prefer AGY_PLUGIN_SECRET so secrets stay out of config exports.",
 				},
+				{
+					Name:        "executor_enabled",
+					Type:        pluginapi.ConfigFieldTypeBoolean,
+					Description: "Serve the mirrored provider from this plugin instead of CLIProxyAPI, so identity headers reach agy2api. Default false, which keeps routing unchanged.",
+				},
+				{
+					Name:        "executor_provider",
+					Type:        pluginapi.ConfigFieldTypeString,
+					Description: "Plugin-owned provider key used in executor mode. It must not be a key CLIProxyAPI already serves natively. Default agy-bridge.",
+				},
+				{
+					Name:        "model_namespace",
+					Type:        pluginapi.ConfigFieldTypeString,
+					Description: "Optional prefix applied to published model IDs while testing, to avoid colliding with the still-enabled mirrored provider. Leave empty to publish the exact configured model names.",
+				},
 			},
 		},
-		Capabilities: registrationCapability{
-			RequestInterceptor: true,
-			ManagementAPI:      true,
-		},
+		Capabilities: registrationCapabilities(),
 	}
+}
+
+// registrationCapabilities keeps model and executor capabilities undeclared
+// until the owner opts in, so installing a new plugin version cannot change
+// which provider serves a model.
+func registrationCapabilities() registrationCapability {
+	capabilities := registrationCapability{
+		RequestInterceptor: true,
+		ManagementAPI:      true,
+	}
+	settings := currentPluginSettings()
+	spec, mirrored := cachedProviderSpec()
+	if settings.ExecutorEnabled && mirrored && canServeModels(settings, spec) {
+		capabilities.ModelRegistrar = true
+		capabilities.ModelProvider = true
+	}
+	return capabilities
 }
 
 func handleInterceptAfter(request []byte) ([]byte, error) {

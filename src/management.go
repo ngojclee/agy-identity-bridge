@@ -103,6 +103,9 @@ func managementSettings() map[string]any {
 		"hmac_secret_source":         settings.hmacSecretSource(),
 		"config_path_found":          snapshot.ConfigPathFound,
 		"plugin_config_found":        snapshot.PluginConfigFound,
+		"executor_enabled":           settings.ExecutorEnabled,
+		"executor_provider":          settings.ExecutorProvider,
+		"model_namespace":            settings.ModelNamespace,
 	}
 }
 
@@ -132,6 +135,20 @@ func publicStatusPage(diagnostics providerDiagnostics) string {
 	raw, errMarshal := json.MarshalIndent(public, "", "  ")
 	if errMarshal != nil {
 		raw = []byte(`{"error":"status serialization failed"}`)
+	}
+	mirrorSummary := "no configured provider matched"
+	if public.MirroredProvider != "" {
+		executorState := "off, routing unchanged"
+		if public.ExecutorEnabled {
+			executorState = "on, this plugin serves provider " + html.EscapeString(public.ExecutorProvider)
+		}
+		mirrorSummary = fmt.Sprintf(
+			"%s &rarr; %d models &middot; api key %s &middot; executor %s",
+			html.EscapeString(public.MirroredProvider),
+			public.MirroredModelCount,
+			map[bool]string{true: "present", false: "missing"}[public.MirroredHasAPIKey],
+			executorState,
+		)
 	}
 	rows := make([]string, 0, len(public.Providers))
 	for _, provider := range public.Providers {
@@ -181,6 +198,7 @@ func publicStatusPage(diagnostics providerDiagnostics) string {
   <main>
     <h1>AGY Identity Bridge</h1>
     <p>Redacted provider matching diagnostics. Use the authenticated Management API status endpoint for path-level details.</p>
+    <p><strong>Mirrored provider:</strong> %s</p>
     <section class="summary">
       <div class="metric"><strong>%d</strong><span>Scanned records</span></div>
       <div class="metric"><strong>%d</strong><span>Matched records</span></div>
@@ -201,6 +219,7 @@ func publicStatusPage(diagnostics providerDiagnostics) string {
   </main>
 </body>
 </html>`,
+		mirrorSummary,
 		public.ScannedRecordCount,
 		public.MatchedRecordCount,
 		public.MatchedProviderCount,

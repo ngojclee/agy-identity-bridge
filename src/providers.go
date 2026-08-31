@@ -146,6 +146,15 @@ type providerDiagnostics struct {
 	LastScanAt               string           `json:"last_scan_at,omitempty"`
 	ScannedProviders         []providerStatus `json:"scanned_providers,omitempty"`
 	Providers                []providerStatus `json:"providers"`
+	MirroredProvider         string           `json:"mirrored_provider,omitempty"`
+	MirroredModelCount       int              `json:"mirrored_model_count"`
+	MirroredHasAPIKey        bool             `json:"mirrored_has_api_key"`
+	MirroredBaseURL          string           `json:"mirrored_base_url,omitempty"`
+	ExecutorEnabled          bool             `json:"executor_enabled"`
+	ExecutorProvider         string           `json:"executor_provider"`
+	ModelNamespace           string           `json:"model_namespace,omitempty"`
+	MirroredProviderEnabled  bool             `json:"mirrored_provider_enabled"`
+	ModelsServed             bool             `json:"models_served"`
 	InterceptCount           uint64           `json:"intercept_count"`
 	LastInterceptAt          string           `json:"last_intercept_at,omitempty"`
 	LastInterceptProvider    string           `json:"last_intercept_provider,omitempty"`
@@ -309,6 +318,9 @@ func scanProviderDiagnostics() providerDiagnostics {
 		PluginConfigFound:        snapshot.PluginConfigFound,
 		Providers:                []providerStatus{},
 		ScannedProviders:         []providerStatus{},
+		ExecutorEnabled:          settings.ExecutorEnabled,
+		ExecutorProvider:         settings.ExecutorProvider,
+		ModelNamespace:           settings.ModelNamespace,
 		Warnings:                 append([]string(nil), snapshot.Warnings...),
 	}
 
@@ -409,6 +421,25 @@ func scanProviderDiagnostics() providerDiagnostics {
 	}
 	out.ActivePrefixes = uniqueStrings(prefixes)
 
+	if spec, mirrored := resolveProviderSpec(); mirrored {
+		out.MirroredProvider = spec.Name
+		out.MirroredBaseURL = redactURL(spec.BaseURL)
+		out.MirroredHasAPIKey = spec.primaryAPIKey() != ""
+		out.MirroredProviderEnabled = spec.Enabled
+		out.MirroredModelCount = len(spec.modelInfos(settings.ModelNamespace))
+		out.ModelsServed = canServeModels(settings, spec)
+		if settings.ExecutorEnabled && !out.ModelsServed {
+			out.Warnings = append(out.Warnings,
+				"executor mode is on but models are withheld: the mirrored provider is still enabled and model_namespace is empty, so publishing the same model IDs would let CLIProxyAPI load balance across both paths. Set model_namespace for a test, or disable the mirrored provider.")
+		} else if settings.ExecutorEnabled && out.MirroredModelCount == 0 {
+			out.Warnings = append(out.Warnings,
+				"executor mode is on but the mirrored provider declares no models; clients would see an empty model list")
+		}
+	} else {
+		out.Warnings = append(out.Warnings,
+			"no configured openai-compatibility provider matched, so executor mode has nothing to mirror")
+	}
+
 	sortProviderStatuses := func(values []providerStatus) {
 		sort.SliceStable(values, func(i, j int) bool {
 			left := strings.ToLower(values[i].Name + "\x00" + values[i].Source + "\x00" + values[i].ProviderKey)
@@ -459,48 +490,27 @@ func scanProviderDiagnostics() providerDiagnostics {
 }
 
 func discoverOpenAICompatibility(root map[string]any) []discoveredProvider {
-	if root == nil {
+	entries := openAICompatEntries(root)
+	if len(entries) == 0 {
 		return nil
 	}
-	raw, ok := mapValue(root, "openai-compatibility", "openai_compatibility")
-	if !ok {
-		return nil
-	}
-	entries := asSlice(raw)
 	out := make([]discoveredProvider, 0, len(entries))
-	for _, item := range entries {
-		providerMap := asMap(item)
-		if providerMap == nil {
-			continue
-		}
+	for _, providerMap := range entries {
 		name, _ := stringValue(providerMap, "name")
 		baseURL, _ := stringValue(providerMap, "base-url", "base_url", "url")
 		prefix, _ := stringValue(providerMap, "prefix")
 		disabled, _ := boolValue(providerMap, "disabled")
-		providerKey := name
-		apiKeys := make([]string, 0)
-		if rawKeys, exists := mapValue(providerMap, "api-key-entries", "api_key_entries"); exists {
-			for _, rawKey := range asSlice(rawKeys) {
-				keyMap := asMap(rawKey)
-				if keyMap == nil {
-					continue
-				}
-				if key, ok := stringValue(keyMap, "api-key", "api_key", "key"); ok && key != "" {
-					apiKeys = append(apiKeys, key)
-				}
-			}
-		}
 		// A provider with no key entries is still a meaningful record: it
 		// tells the operator that the provider exists but has no API key.
 		out = append(out, discoveredProvider{
 			Name:        name,
-			ProviderKey: providerKey,
+			ProviderKey: name,
 			URL:         baseURL,
 			Prefix:      prefix,
 			Source:      "openai-compatibility",
 			Active:      !disabled,
 			Disabled:    disabled,
-			APIKeys:     uniqueStrings(apiKeys),
+			APIKeys:     compatAPIKeys(providerMap),
 		})
 	}
 	return out
@@ -643,6 +653,7 @@ func publicProviderDiagnostics(in providerDiagnostics) providerDiagnostics {
 	out.HMACSecretConfigured = in.HMACSecretConfigured
 	out.ConfigPathFound = false
 	out.ScannedProviders = nil
+	out.MirroredBaseURL = ""
 	out.Providers = make([]providerStatus, 0, len(in.Providers))
 	for _, item := range in.Providers {
 		// CPA serves resource routes without management authentication, so
