@@ -23,16 +23,18 @@ type registration struct {
 
 type registrationCapability struct {
 	RequestInterceptor bool `json:"request_interceptor"`
+	ManagementAPI      bool `json:"management_api"`
 }
 
 type InterceptRequestPayload struct {
-	SourceFormat string              `json:"source_format"`
-	ToFormat     string              `json:"to_format"`
-	Model        string              `json:"model"`
-	Stream       bool                `json:"stream"`
-	Headers      map[string][]string `json:"headers"`
-	Body         []byte              `json:"body"`
-	Metadata     map[string]any      `json:"metadata"`
+	SourceFormat   string              `json:"source_format"`
+	ToFormat       string              `json:"to_format"`
+	Model          string              `json:"model"`
+	RequestedModel string              `json:"requested_model"`
+	Stream         bool                `json:"stream"`
+	Headers        map[string][]string `json:"headers"`
+	Body           []byte              `json:"body"`
+	Metadata       map[string]any      `json:"metadata"`
 }
 
 type InterceptResponsePayload struct {
@@ -44,16 +46,16 @@ type InterceptResponsePayload struct {
 func handleMethod(method string, request []byte) ([]byte, error) {
 	switch method {
 	case pluginabi.MethodPluginRegister, pluginabi.MethodPluginReconfigure:
-		var req lifecycleRequest
-		if len(request) > 0 {
-			if err := json.Unmarshal(request, &req); err != nil {
-				return errorEnvelope("config_error", err.Error()), nil
-			}
+		if errConfigure := configurePlugin(request); errConfigure != nil {
+			return errorEnvelope("config_error", errConfigure.Error()), nil
 		}
-		pluginSettings = decodePluginSettings(req.ConfigYAML)
 		return okEnvelope(pluginRegistration()), nil
 	case pluginabi.MethodRequestInterceptAfter:
 		return handleInterceptAfter(request)
+	case pluginabi.MethodManagementRegister:
+		return handleManagementRegister(), nil
+	case pluginabi.MethodManagementHandle:
+		return handleManagement(request)
 	case pluginabi.MethodPluginShutdown:
 		return okEnvelope(map[string]string{"status": "shutdown"}), nil
 	default:
@@ -61,41 +63,117 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 	}
 }
 
+func configurePlugin(raw []byte) error {
+	var request lifecycleRequest
+	if len(raw) > 0 {
+		if errUnmarshal := json.Unmarshal(raw, &request); errUnmarshal != nil {
+			return errUnmarshal
+		}
+	}
+	snapshot := loadPluginConfiguration(request.ConfigYAML)
+	applyPluginConfiguration(snapshot)
+
+	diagnostics := scanProviderDiagnostics()
+	hostLog("info", "provider discovery completed", map[string]any{
+		"config_path_found":        diagnostics.ConfigPathFound,
+		"plugin_config_found":      diagnostics.PluginConfigFound,
+		"scanned_records":          diagnostics.ScannedRecordCount,
+		"matched_records":          diagnostics.MatchedRecordCount,
+		"matched_providers":        diagnostics.MatchedProviderCount,
+		"runtime_auth_count":       diagnostics.RuntimeAuthCount,
+		"auto_discover":            diagnostics.AutoDiscover,
+		"match_mode":               diagnostics.MatchMode,
+		"match_api_key_configured": diagnostics.MatchAPIKeyConfigured,
+	})
+	return nil
+}
+
 func pluginRegistration() registration {
 	return registration{
 		SchemaVersion: pluginabi.SchemaVersion,
 		Metadata: pluginapi.Metadata{
 			Name:             "agy-identity-bridge",
-			Version:          "0.1.3",
+			Version:          pluginVersion,
 			Author:           "ngojclee",
 			GitHubRepository: "https://github.com/ngojclee/agy-identity-bridge",
+			ConfigFields: []pluginapi.ConfigField{
+				{
+					Name:        "auto_discover",
+					Type:        pluginapi.ConfigFieldTypeBoolean,
+					Description: "When true, match native Antigravity or provider names/URLs containing antigravity or agy2api when no explicit rule is set. Default true.",
+				},
+				{
+					Name:        "include_native_antigravity",
+					Type:        pluginapi.ConfigFieldTypeBoolean,
+					Description: "Allow automatic matching of the native CPA Antigravity format. Default true.",
+				},
+				{
+					Name:        "match_mode",
+					Type:        pluginapi.ConfigFieldTypeEnum,
+					EnumValues:  []string{"any", "all"},
+					Description: "With explicit rules, match any configured criterion or require all configured criteria. Default any.",
+				},
+				{
+					Name:        "match_name",
+					Type:        pluginapi.ConfigFieldTypeString,
+					Description: "Provider name selector. Case-insensitive substring or * and ? wildcard matching.",
+				},
+				{
+					Name:        "match_provider",
+					Type:        pluginapi.ConfigFieldTypeString,
+					Description: "Single provider name/key selector. This legacy-compatible alias is merged into match_providers.",
+				},
+				{
+					Name:        "match_url",
+					Type:        pluginapi.ConfigFieldTypeString,
+					Description: "Provider base URL selector. Case-insensitive substring or * and ? wildcard matching.",
+				},
+				{
+					Name:        "match_api_key",
+					Type:        pluginapi.ConfigFieldTypeString,
+					Description: "Exact provider API key selector. It is never returned by diagnostics; leave empty for OAuth/native providers.",
+				},
+				{
+					Name:        "match_providers",
+					Type:        pluginapi.ConfigFieldTypeArray,
+					Description: "Additional provider name/key selectors. Legacy match_provider is also accepted.",
+				},
+				{
+					Name:        "hmac_secret_source",
+					Type:        pluginapi.ConfigFieldTypeEnum,
+					EnumValues:  []string{"env", "config", "provider_api_key", "none"},
+					Description: "Signature source: AGY_PLUGIN_SECRET from the CPA environment, the selected provider API key, or none. Default env.",
+				},
+				{
+					Name:        "hmac_secret",
+					Type:        pluginapi.ConfigFieldTypeString,
+					Description: "Optional HMAC secret when hmac_secret_source is config. Prefer AGY_PLUGIN_SECRET so secrets stay out of config exports.",
+				},
+			},
 		},
 		Capabilities: registrationCapability{
 			RequestInterceptor: true,
+			ManagementAPI:      true,
 		},
 	}
 }
 
 func handleInterceptAfter(request []byte) ([]byte, error) {
 	var payload InterceptRequestPayload
-	if err := json.Unmarshal(request, &payload); err != nil {
-		return errorEnvelope("parse_error", err.Error()), nil
+	if errUnmarshal := json.Unmarshal(request, &payload); errUnmarshal != nil {
+		return errorEnvelope("parse_error", errUnmarshal.Error()), nil
 	}
 
-	providerName := payload.Model
-	providerURL := ""
-	if payload.Metadata != nil {
-		if v, ok := payload.Metadata["provider_name"].(string); ok {
-			providerName = v
-		}
-		if v, ok := payload.Metadata["base_url"].(string); ok {
-			providerURL = v
-		}
-	}
-
-	if !pluginSettings.shouldIntercept(providerName, providerURL) {
+	settings := currentPluginSettings()
+	if !settings.Enabled {
 		return okEnvelope(InterceptResponsePayload{}), nil
 	}
+	candidate := candidateFromPayload(payload)
+	matched, _ := settings.shouldInterceptCandidate(candidate)
+	if !matched {
+		return okEnvelope(InterceptResponsePayload{}), nil
+	}
+	recordIntercept(candidate)
 
 	bearerToken := extractBearerToken(payload.Headers)
 	if bearerToken == "" {
@@ -104,7 +182,6 @@ func handleInterceptAfter(request []byte) ([]byte, error) {
 
 	principalHash := derivePrincipal(bearerToken)
 	clientApp := extractClientApp(payload.Headers)
-
 	headers := map[string][]string{
 		"X-AGY-Principal": {principalHash},
 	}
@@ -112,9 +189,8 @@ func handleInterceptAfter(request []byte) ([]byte, error) {
 		headers["X-AGY-Client-App"] = []string{clientApp}
 	}
 
-	if secret := pluginSettings.hmacSecret(); secret != "" {
-		sig := computeHMAC(principalHash, secret)
-		headers["X-AGY-Signature"] = []string{sig}
+	if secret := hmacSecretForCandidate(settings, candidate); secret != "" {
+		headers["X-AGY-Signature"] = []string{computeHMAC(principalHash, secret)}
 	}
 
 	return okEnvelope(InterceptResponsePayload{Headers: headers}), nil
@@ -123,10 +199,9 @@ func handleInterceptAfter(request []byte) ([]byte, error) {
 func extractBearerToken(headers map[string][]string) string {
 	for key, values := range headers {
 		if strings.EqualFold(key, "Authorization") && len(values) > 0 {
-			value := values[0]
-			parts := strings.SplitN(value, " ", 2)
+			parts := strings.SplitN(strings.TrimSpace(values[0]), " ", 2)
 			if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
-				return parts[1]
+				return strings.TrimSpace(parts[1])
 			}
 		}
 	}
@@ -136,22 +211,22 @@ func extractBearerToken(headers map[string][]string) string {
 func extractClientApp(headers map[string][]string) string {
 	for key, values := range headers {
 		if strings.EqualFold(key, "X-AGY-Client-App") && len(values) > 0 {
-			return values[0]
+			return strings.TrimSpace(values[0])
 		}
 	}
 	for key, values := range headers {
 		if strings.EqualFold(key, "User-Agent") && len(values) > 0 {
 			ua := strings.ToLower(values[0])
-			if strings.Contains(ua, "codex") {
+			switch {
+			case strings.Contains(ua, "codex"):
 				return "codex"
-			}
-			if strings.Contains(ua, "hermes") {
+			case strings.Contains(ua, "hermes"):
 				return "hermes"
-			}
-			if strings.Contains(ua, "cursor") {
+			case strings.Contains(ua, "cursor"):
 				return "cursor"
+			default:
+				return strings.TrimSpace(values[0])
 			}
-			return values[0]
 		}
 	}
 	return ""
@@ -169,11 +244,30 @@ func computeHMAC(principalHash string, secret string) string {
 }
 
 func okEnvelope(v any) []byte {
-	raw, _ := json.Marshal(map[string]any{"ok": v})
+	result, errMarshal := json.Marshal(v)
+	if errMarshal != nil {
+		return errorEnvelope("serialization_error", errMarshal.Error())
+	}
+	raw, errMarshal := json.Marshal(pluginabi.Envelope{
+		OK:     true,
+		Result: result,
+	})
+	if errMarshal != nil {
+		return []byte(`{"ok":false,"error":{"code":"serialization_error","message":"failed to encode plugin envelope"}}`)
+	}
 	return raw
 }
 
 func errorEnvelope(code, message string) []byte {
-	raw, _ := json.Marshal(map[string]any{"error": map[string]string{"code": code, "message": message}})
+	raw, errMarshal := json.Marshal(pluginabi.Envelope{
+		OK: false,
+		Error: &pluginabi.Error{
+			Code:    code,
+			Message: message,
+		},
+	})
+	if errMarshal != nil {
+		return []byte(`{"ok":false,"error":{"code":"serialization_error","message":"failed to encode plugin error"}}`)
+	}
 	return raw
 }

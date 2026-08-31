@@ -66,8 +66,6 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 )
 
-var pluginVersion = "0.1.0"
-
 func main() {}
 
 //export cliproxy_plugin_init
@@ -127,4 +125,32 @@ func writeResponse(response *C.cliproxy_buffer, raw []byte) {
 	}
 	response.ptr = ptr
 	response.len = C.size_t(len(raw))
+}
+
+// callHost invokes a CPA host callback and copies the returned buffer before
+// releasing it through the host-provided allocator.
+func callHost(method string, payload []byte) ([]byte, bool) {
+	cMethod := C.CString(method)
+	defer C.free(unsafe.Pointer(cMethod))
+
+	var request *C.uint8_t
+	if len(payload) > 0 {
+		request = (*C.uint8_t)(C.CBytes(payload))
+		defer C.free(unsafe.Pointer(request))
+	}
+
+	var response C.cliproxy_buffer
+	rc := C.call_host_api(
+		cMethod,
+		request,
+		C.size_t(len(payload)),
+		&response,
+	)
+
+	var out []byte
+	if response.ptr != nil && response.len > 0 {
+		out = C.GoBytes(unsafe.Pointer(response.ptr), C.int(response.len))
+		C.free_host_buffer(response.ptr, response.len)
+	}
+	return out, rc == 0
 }

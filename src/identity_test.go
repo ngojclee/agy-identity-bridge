@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"testing"
+
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 )
 
 func TestDerivePrincipal(t *testing.T) {
@@ -82,5 +85,23 @@ func TestPluginRegistration(t *testing.T) {
 	}
 	if reg.Metadata.Name != "agy-identity-bridge" {
 		t.Errorf("plugin name = %q, want agy-identity-bridge", reg.Metadata.Name)
+	}
+}
+
+func TestPluginEnvelopesUseCPAABIShape(t *testing.T) {
+	var success pluginabi.Envelope
+	if err := json.Unmarshal(okEnvelope(map[string]string{"status": "ok"}), &success); err != nil {
+		t.Fatal(err)
+	}
+	if !success.OK || len(success.Result) == 0 || success.Error != nil {
+		t.Fatalf("success envelope = %+v", success)
+	}
+
+	var failure pluginabi.Envelope
+	if err := json.Unmarshal(errorEnvelope("bad_request", "invalid payload"), &failure); err != nil {
+		t.Fatal(err)
+	}
+	if failure.OK || failure.Error == nil || failure.Error.Code != "bad_request" {
+		t.Fatalf("failure envelope = %+v", failure)
 	}
 }
