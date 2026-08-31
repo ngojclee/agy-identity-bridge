@@ -496,8 +496,12 @@ func publicProviderDiagnostics(in providerDiagnostics) providerDiagnostics {
 	out.ScannedProviders = nil
 	out.Providers = make([]providerStatus, 0, len(in.Providers))
 	for _, item := range in.Providers {
+		// CPA serves resource routes without management authentication, so
+		// anything that can identify an operator account must be dropped here.
+		// Auth labels are account emails for native Antigravity credentials.
 		item.URL = ""
 		item.AuthIndex = ""
+		item.Label = ""
 		out.Providers = append(out.Providers, item)
 	}
 	return out

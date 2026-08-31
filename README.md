@@ -117,7 +117,10 @@ CPA also exposes a redacted browser resource:
 ```
 
 This resource intentionally omits config paths, URLs, auth indexes, and
-credential values.
+credential values. CPA serves plugin resource routes without management
+authentication, so account labels (native Antigravity auth labels are account
+emails) are also stripped from this projection. Use the authenticated status
+route when you need them.
 
 ## CPA Lifecycle Statuses
 
@@ -144,19 +147,19 @@ Go 1.26 and GCC:
 
 ```sh
 make test
-make build VERSION=0.1.5
+make build VERSION=0.1.6
 ```
 
 The output is:
 
 ```text
-dist/agy-identity-bridge-v0.1.5.so
+dist/agy-identity-bridge-v0.1.6.so
 ```
 
 The GitHub Actions workflow builds and packages:
 
 ```text
-agy-identity-bridge_0.1.5_linux_amd64.zip
+agy-identity-bridge_0.1.6_linux_amd64.zip
 checksums.txt
 ```
 

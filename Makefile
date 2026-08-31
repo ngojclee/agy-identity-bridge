@@ -1,4 +1,4 @@
-VERSION ?= 0.1.5
+VERSION ?= 0.1.6
 GO ?= go
 PLUGIN_ID = agy-identity-bridge
 OUT = dist/agy-identity-bridge-v$(VERSION).so

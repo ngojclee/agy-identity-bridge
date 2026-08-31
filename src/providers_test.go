@@ -259,7 +259,7 @@ openai-compatibility:
 }
 
 func TestPublicStatusPageShowsSummaryWithoutPrivateSelectors(t *testing.T) {
-	page := publicStatusPage(providerDiagnostics{
+	diagnostics := providerDiagnostics{
 		ScannedRecordCount:   1,
 		MatchedRecordCount:   1,
 		MatchedProviderCount: 1,
@@ -271,16 +271,42 @@ func TestPublicStatusPageShowsSummaryWithoutPrivateSelectors(t *testing.T) {
 			Active:      true,
 			Matched:     true,
 			MatchedBy:   []string{"name"},
+		}, {
+			Name:        "antigravity",
+			Label:       "operator.personal@gmail.com",
+			ProviderKey: "antigravity",
+			AuthIndex:   "auth-index-secret",
+			Source:      "runtime-auth",
+			Native:      true,
+			Active:      true,
+			Matched:     true,
+			MatchedBy:   []string{"native-antigravity"},
 		}},
 		MatchName:  "private-selector",
 		ConfigPath: "/private/config.yaml",
-	})
+	}
+	page := publicStatusPage(diagnostics)
 	if !strings.Contains(page, "Scanned records") || !strings.Contains(page, "Antigravity") {
 		t.Fatalf("public status page is missing summary/provider data: %s", page)
 	}
-	for _, privateValue := range []string{"private-selector", "/private/config.yaml", "private.example"} {
+	for _, privateValue := range []string{
+		"private-selector", "/private/config.yaml", "private.example",
+		"operator.personal@gmail.com", "auth-index-secret",
+	} {
 		if strings.Contains(page, privateValue) {
 			t.Fatalf("public status page leaked %q", privateValue)
+		}
+	}
+
+	// CPA serves plugin resource routes without management authentication, so
+	// account identifiers must never survive into the public projection.
+	public := publicProviderDiagnostics(diagnostics)
+	if len(public.Providers) != 2 {
+		t.Fatalf("public providers = %d, want 2", len(public.Providers))
+	}
+	for _, provider := range public.Providers {
+		if provider.Label != "" || provider.AuthIndex != "" || provider.URL != "" {
+			t.Fatalf("public provider kept private identity fields: %+v", provider)
 		}
 	}
 }
