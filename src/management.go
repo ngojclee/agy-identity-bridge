@@ -96,6 +96,8 @@ func managementSettings() map[string]any {
 		"match_api_key_configured":   settings.MatchAPIKey != "",
 		"match_provider":             settings.MatchProvider,
 		"match_providers":            settings.MatchProviders,
+		"match_model":                settings.MatchModel,
+		"match_models":               settings.MatchModels,
 		"configured_selector_count":  settings.configuredSelectorCount(),
 		"hmac_secret_configured":     settings.hmacSecret() != "",
 		"hmac_secret_source":         settings.hmacSecretSource(),

@@ -82,15 +82,128 @@ func TestCandidateFromPayloadUsesProviderContextInsteadOfModelName(t *testing.T)
 			"base_url":         "https://agy.internal/v1",
 			"selected_auth_id": "auth-1",
 		},
-	})
+	}, defaultPluginSettings())
 	if candidate.Name != "Antigravity" || candidate.URL != "https://agy.internal/v1" {
 		t.Fatalf("candidate provider context = %+v", candidate)
 	}
-	if candidate.APIKey != "upstream-key" || candidate.AuthID != "auth-1" {
+	// The Authorization header is the client key, never a provider credential.
+	if candidate.APIKey != "" || candidate.ClientToken != "upstream-key" || candidate.AuthID != "auth-1" {
 		t.Fatalf("candidate auth context = %+v", candidate)
 	}
 	if candidate.Name == candidate.ToFormat || candidate.Name == "gemini-3.1-pro" {
 		t.Fatalf("candidate fell back to model name: %+v", candidate)
+	}
+}
+
+// CLIProxyAPI marshals pluginapi.RequestInterceptRequest without json tags, so
+// the wire keys are the Go field names. A snake_case-only parser silently read
+// nothing and made the whole interceptor a no-op.
+func TestParseInterceptPayloadAcceptsCPAGoStyleKeys(t *testing.T) {
+	raw := []byte(`{"SourceFormat":"openai","ToFormat":"openai","Model":"gemini-3.5-flash-low","RequestedModel":"agy/gemini-3.5-flash-low","Stream":false,"Headers":{"Authorization":["Bearer client-key"],"User-Agent":["Hermes/1.0"]},"Metadata":{"selected_auth_id":"auth-9"}}`)
+	payload, errParse := parseInterceptPayload(raw)
+	if errParse != nil {
+		t.Fatal(errParse)
+	}
+	if payload.ToFormat != "openai" || payload.RequestedModel != "agy/gemini-3.5-flash-low" {
+		t.Fatalf("Go-style keys lost: %+v", payload)
+	}
+	if payload.Headers["Authorization"][0] != "Bearer client-key" {
+		t.Fatalf("headers not parsed: %+v", payload.Headers)
+	}
+	if metadataString(payload.Metadata, "selected_auth_id") != "auth-9" {
+		t.Fatalf("metadata not parsed: %+v", payload.Metadata)
+	}
+
+	snake, errSnake := parseInterceptPayload([]byte(`{"to_format":"openai","requested_model":"agy/x","headers":{"Authorization":["Bearer k"]}}`))
+	if errSnake != nil || snake.ToFormat != "openai" || snake.RequestedModel != "agy/x" {
+		t.Fatalf("snake_case compatibility broken: %+v %v", snake, errSnake)
+	}
+}
+
+// The response must decode into pluginapi.RequestInterceptResponse, whose
+// fields are also untagged.
+func TestInterceptResponseUsesCPAGoStyleKeys(t *testing.T) {
+	raw := okEnvelope(InterceptResponsePayload{
+		Headers: map[string][]string{"X-AGY-Principal": {"abc"}},
+	})
+	var decoded struct {
+		OK     bool `json:"ok"`
+		Result struct {
+			Headers      map[string][]string
+			Body         []byte
+			ClearHeaders []string
+		}
+	}
+	if errUnmarshal := json.Unmarshal(raw, &decoded); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	if !decoded.OK || len(decoded.Result.Headers["X-AGY-Principal"]) != 1 {
+		t.Fatalf("CPA could not decode the interceptor response: %s", raw)
+	}
+}
+
+// End to end for the real deployment shape: an OpenAI-compatible provider named
+// Antigravity with prefix agy, identified only by the requested model.
+func TestInterceptResolvesProviderFromModelPrefix(t *testing.T) {
+	previousSettings := currentPluginSettings()
+	defer func() {
+		pluginSettingsMu.Lock()
+		pluginSettings = previousSettings
+		pluginSettingsMu.Unlock()
+		refreshMatchedRecords(nil)
+	}()
+	t.Setenv("CPA_CONFIG_PATH", "Z:\\missing\\cpa-config.yaml")
+
+	applyPluginConfiguration(loadPluginConfiguration([]byte(`
+plugins:
+  configs:
+    agy-identity-bridge:
+      enabled: true
+      auto_discover: true
+      include_native_antigravity: false
+openai-compatibility:
+  - name: Antigravity
+    prefix: agy
+    base-url: http://10.21.4.101:8123/v1
+    api-key-entries:
+      - api-key: provider-secret
+  - name: Other
+    prefix: other
+    base-url: https://other.example/v1
+    api-key-entries:
+      - api-key: other-secret
+`)))
+	settings := currentPluginSettings()
+	diagnostics := scanProviderDiagnostics()
+	if len(diagnostics.ActivePrefixes) != 1 || diagnostics.ActivePrefixes[0] != "agy" {
+		t.Fatalf("active prefixes = %#v, want [agy]", diagnostics.ActivePrefixes)
+	}
+
+	raw := []byte(`{"ToFormat":"openai","Model":"gemini-3.5-flash-low","RequestedModel":"agy/gemini-3.5-flash-low","Headers":{"Authorization":["Bearer client-key"],"User-Agent":["codex-tui/0.128.0"]}}`)
+	response, errHandle := handleInterceptAfter(raw)
+	if errHandle != nil {
+		t.Fatal(errHandle)
+	}
+	text := string(response)
+	if !strings.Contains(text, "X-AGY-Principal") {
+		t.Fatalf("model-prefix request received no identity headers: %s", text)
+	}
+	if strings.Contains(text, "provider-secret") || strings.Contains(text, "client-key") {
+		t.Fatalf("response leaked a credential: %s", text)
+	}
+
+	other := []byte(`{"ToFormat":"openai","Model":"kimi-k2","RequestedModel":"other/kimi-k2","Headers":{"Authorization":["Bearer client-key"]}}`)
+	otherResponse, errOther := handleInterceptAfter(other)
+	if errOther != nil {
+		t.Fatal(errOther)
+	}
+	if strings.Contains(string(otherResponse), "X-AGY-Principal") {
+		t.Fatalf("unrelated provider was intercepted: %s", otherResponse)
+	}
+	if matched, by := settings.shouldInterceptCandidate(providerCandidate{
+		ToFormat: "antigravity", Native: true,
+	}); matched || len(by) != 0 {
+		t.Fatal("include_native_antigravity=false must not match native requests")
 	}
 }
 

@@ -35,13 +35,36 @@ plugins:
       match_api_key: ""
       match_provider: ""
       match_providers: []
+      match_model: "agy/*"
+      match_models: []
       hmac_secret_source: env
 ```
+
+## How the plugin identifies a provider at request time
+
+CLIProxyAPI calls the after-auth interceptor with `pluginapi.RequestInterceptRequest`,
+which carries the source format, the selected upstream model, the client
+requested model and the request headers. It does **not** carry the provider
+name or base URL for OpenAI-compatible providers, and `ToFormat` is just
+`openai` for all of them.
+
+The one field that does identify the provider is the requested model prefix.
+So the plugin reads `openai-compatibility` from the mounted CPA config, keeps
+the providers your selectors match, and maps a live request back to its
+provider by that provider's `prefix`. A request for `agy/gemini-3.5-flash-low`
+is therefore attributed to the provider whose `prefix: agy`.
+
+That means a provider you want to affect must have a `prefix` in CPA config.
+The status endpoint lists what it found under `active_prefixes` and warns when
+a matched provider has none, because such a provider cannot be identified per
+request.
 
 When all `match_*` selectors are empty and `auto_discover` is enabled, the
 plugin matches:
 
 - native CPA requests whose `ToFormat` is `antigravity`;
+- requests whose model carries the prefix of a provider that auto discovery
+  matched;
 - providers whose name, provider key, or base URL contains `antigravity` or
   `agy2api`.
 
@@ -53,8 +76,14 @@ wildcards:
 - `match_api_key`: exact provider API key;
 - `match_provider`: one provider name/key selector (legacy-compatible alias);
 - `match_providers`: additional provider name/key patterns;
+- `match_model`: requested model, for example `agy/*`;
+- `match_models`: additional requested model patterns;
 - `match_mode: any`: at least one configured selector must match;
 - `match_mode: all`: every configured selector must match.
+
+`match_name` and `match_url` describe which config providers the plugin owns
+and shape the diagnostics view. Add `match_model` when you want the request
+path pinned explicitly as well, which is the most precise option.
 
 `match_api_key` is a selector only. It is not silently reused as the HMAC
 secret.
@@ -147,19 +176,19 @@ Go 1.26 and GCC:
 
 ```sh
 make test
-make build VERSION=0.1.6
+make build VERSION=0.1.7
 ```
 
 The output is:
 
 ```text
-dist/agy-identity-bridge-v0.1.6.so
+dist/agy-identity-bridge-v0.1.7.so
 ```
 
 The GitHub Actions workflow builds and packages:
 
 ```text
-agy-identity-bridge_0.1.6_linux_amd64.zip
+agy-identity-bridge_0.1.7_linux_amd64.zip
 checksums.txt
 ```
 

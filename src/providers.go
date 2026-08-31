@@ -13,13 +13,17 @@ import (
 )
 
 type providerCandidate struct {
-	Name        string
-	ProviderKey string
-	URL         string
-	APIKey      string
-	ToFormat    string
-	AuthID      string
-	Native      bool
+	Name           string
+	ProviderKey    string
+	URL            string
+	APIKey         string
+	ToFormat       string
+	AuthID         string
+	Model          string
+	RequestedModel string
+	ResolvedPrefix string
+	ClientToken    string
+	Native         bool
 }
 
 type discoveredProvider struct {
@@ -27,6 +31,7 @@ type discoveredProvider struct {
 	Label       string
 	ProviderKey string
 	URL         string
+	Prefix      string
 	Source      string
 	AuthIndex   string
 	Active      bool
@@ -35,11 +40,71 @@ type discoveredProvider struct {
 	APIKeys     []string
 }
 
+// matchedProviderRecord is the runtime view of a provider the plugin decided it
+// owns. CLIProxyAPI only tells the interceptor which model was requested, so
+// the provider prefix is what maps a live request back to its config record.
+type matchedProviderRecord struct {
+	Name   string
+	Prefix string
+	URL    string
+	APIKey string
+}
+
+var matchedRecords struct {
+	sync.RWMutex
+	items []matchedProviderRecord
+}
+
+func refreshMatchedRecords(items []matchedProviderRecord) {
+	matchedRecords.Lock()
+	matchedRecords.items = items
+	matchedRecords.Unlock()
+}
+
+func currentMatchedRecords() []matchedProviderRecord {
+	matchedRecords.RLock()
+	defer matchedRecords.RUnlock()
+	return append([]matchedProviderRecord(nil), matchedRecords.items...)
+}
+
+// resolveRecordByModel maps a requested model such as "agy/gemini-pro" back to
+// the config provider that owns the "agy" prefix. The longest prefix wins so a
+// nested prefix stays with the more specific provider.
+func resolveRecordByModel(models ...string) (matchedProviderRecord, bool) {
+	records := currentMatchedRecords()
+	if len(records) == 0 {
+		return matchedProviderRecord{}, false
+	}
+	for _, model := range models {
+		model = strings.ToLower(strings.TrimSpace(model))
+		if model == "" {
+			continue
+		}
+		var best matchedProviderRecord
+		bestLen := -1
+		for _, record := range records {
+			prefix := strings.ToLower(strings.TrimSpace(record.Prefix))
+			if prefix == "" {
+				continue
+			}
+			if strings.HasPrefix(model, prefix+"/") && len(prefix) > bestLen {
+				best = record
+				bestLen = len(prefix)
+			}
+		}
+		if bestLen > 0 {
+			return best, true
+		}
+	}
+	return matchedProviderRecord{}, false
+}
+
 type providerStatus struct {
 	Name             string   `json:"name"`
 	Label            string   `json:"label,omitempty"`
 	ProviderKey      string   `json:"provider_key,omitempty"`
 	URL              string   `json:"url,omitempty"`
+	Prefix           string   `json:"prefix,omitempty"`
 	Source           string   `json:"source"`
 	AuthIndex        string   `json:"auth_index,omitempty"`
 	Native           bool     `json:"native"`
@@ -63,6 +128,8 @@ type providerDiagnostics struct {
 	MatchAPIKeyConfigured    bool             `json:"match_api_key_configured"`
 	MatchProvider            string           `json:"match_provider,omitempty"`
 	MatchProviders           []string         `json:"match_providers,omitempty"`
+	MatchModel               string           `json:"match_model,omitempty"`
+	MatchModels              []string         `json:"match_models,omitempty"`
 	ConfiguredSelectorCount  int              `json:"configured_selector_count"`
 	HMACSecretConfigured     bool             `json:"hmac_secret_configured"`
 	HMACSecretSource         string           `json:"hmac_secret_source"`
@@ -82,6 +149,7 @@ type providerDiagnostics struct {
 	InterceptCount           uint64           `json:"intercept_count"`
 	LastInterceptAt          string           `json:"last_intercept_at,omitempty"`
 	LastInterceptProvider    string           `json:"last_intercept_provider,omitempty"`
+	ActivePrefixes           []string         `json:"active_prefixes,omitempty"`
 	Warnings                 []string         `json:"warnings"`
 }
 
@@ -92,9 +160,11 @@ var interceptState struct {
 	lastName string
 }
 
-func candidateFromPayload(payload InterceptRequestPayload) providerCandidate {
+func candidateFromPayload(payload InterceptRequestPayload, settings PluginSettings) providerCandidate {
 	candidate := providerCandidate{
-		ToFormat: strings.TrimSpace(payload.ToFormat),
+		ToFormat:       strings.TrimSpace(payload.ToFormat),
+		Model:          strings.TrimSpace(payload.Model),
+		RequestedModel: strings.TrimSpace(payload.RequestedModel),
 	}
 	if payload.Metadata != nil {
 		candidate.Name = metadataString(payload.Metadata,
@@ -123,10 +193,35 @@ func candidateFromPayload(payload InterceptRequestPayload) providerCandidate {
 			"X-Provider-Base-URL", "X-Provider-URL", "X-AGY-Provider-URL")
 	}
 	if candidate.APIKey == "" {
-		// After-auth requests normally carry the selected upstream key here.
-		// It is used only for constant-time matching/signing and is never
-		// returned in diagnostics.
-		candidate.APIKey = extractBearerToken(payload.Headers)
+		// The Authorization header at this point still holds the *client* key,
+		// not the upstream credential, so it must never be treated as a
+		// provider API key for matching or signing.
+		candidate.ClientToken = extractBearerToken(payload.Headers)
+	}
+
+	// CLIProxyAPI does not expose provider identity to the after-auth
+	// interceptor for OpenAI-compatible providers. Resolving the requested
+	// model prefix back to the config record that owns it is what makes
+	// per-provider matching and signing possible at request time.
+	// Native means the request is served by CPA's own Antigravity executor,
+	// which is only ever visible through ToFormat. Deriving it from a config
+	// display name would misclassify an OpenAI-compatible provider that happens
+	// to be called Antigravity.
+	candidate.Native = isNativeAntigravity(candidate.ToFormat)
+	if record, ok := resolveRecordByModel(candidate.RequestedModel, candidate.Model); ok {
+		candidate.ResolvedPrefix = record.Prefix
+		if candidate.Name == "" {
+			candidate.Name = record.Name
+		}
+		if candidate.ProviderKey == "" {
+			candidate.ProviderKey = record.Name
+		}
+		if candidate.URL == "" {
+			candidate.URL = record.URL
+		}
+		if candidate.APIKey == "" {
+			candidate.APIKey = record.APIKey
+		}
 	}
 	if candidate.Name == "" {
 		candidate.Name = candidate.ProviderKey
@@ -134,9 +229,11 @@ func candidateFromPayload(payload InterceptRequestPayload) providerCandidate {
 	if candidate.Name == "" {
 		candidate.Name = candidate.ToFormat
 	}
-	candidate.Native = isNativeAntigravity(candidate.ToFormat) ||
-		isNativeAntigravity(candidate.Name) ||
-		isNativeAntigravity(candidate.ProviderKey)
+	if candidate.ResolvedPrefix == "" {
+		candidate.Native = candidate.Native ||
+			isNativeAntigravity(candidate.Name) ||
+			isNativeAntigravity(candidate.ProviderKey)
+	}
 	return candidate
 }
 
@@ -202,6 +299,8 @@ func scanProviderDiagnostics() providerDiagnostics {
 		MatchAPIKeyConfigured:    settings.MatchAPIKey != "",
 		MatchProvider:            settings.MatchProvider,
 		MatchProviders:           append([]string(nil), settings.MatchProviders...),
+		MatchModel:               settings.MatchModel,
+		MatchModels:              append([]string(nil), settings.MatchModels...),
 		ConfiguredSelectorCount:  settings.configuredSelectorCount(),
 		HMACSecretConfigured:     settings.hmacSecret() != "",
 		HMACSecretSource:         settings.hmacSecretSource(),
@@ -237,6 +336,7 @@ func scanProviderDiagnostics() providerDiagnostics {
 
 	out.ScannedRecordCount = len(discovered)
 	matchedKeys := make(map[string]struct{})
+	matchedRecordsSeen := make(map[string]matchedProviderRecord)
 	for _, item := range discovered {
 		switch item.Source {
 		case "openai-compatibility":
@@ -250,6 +350,7 @@ func scanProviderDiagnostics() providerDiagnostics {
 			Label:            item.Label,
 			ProviderKey:      item.ProviderKey,
 			URL:              redactURL(item.URL),
+			Prefix:           item.Prefix,
 			Source:           item.Source,
 			AuthIndex:        item.AuthIndex,
 			Native:           item.Native,
@@ -269,8 +370,44 @@ func scanProviderDiagnostics() providerDiagnostics {
 		key := providerIdentityKey(item)
 		matchedKeys[key] = struct{}{}
 		out.Providers = append(out.Providers, status)
+		if item.Source == "openai-compatibility" && len(item.APIKeys) > 0 {
+			for _, apiKey := range item.APIKeys {
+				record := matchedProviderRecord{
+					Name:   status.Name,
+					Prefix: item.Prefix,
+					URL:    item.URL,
+					APIKey: apiKey,
+				}
+				matchedRecordsSeen[strings.ToLower(record.Prefix)+"\x00"+apiKey] = record
+			}
+		} else if item.Source == "openai-compatibility" {
+			matchedRecordsSeen[strings.ToLower(item.Prefix)+"\x00"] = matchedProviderRecord{
+				Name:   status.Name,
+				Prefix: item.Prefix,
+				URL:    item.URL,
+			}
+		}
 	}
 	out.MatchedProviderCount = len(matchedKeys)
+
+	records := make([]matchedProviderRecord, 0, len(matchedRecordsSeen))
+	for _, record := range matchedRecordsSeen {
+		records = append(records, record)
+	}
+	sort.SliceStable(records, func(i, j int) bool {
+		return strings.ToLower(records[i].Prefix) < strings.ToLower(records[j].Prefix)
+	})
+	refreshMatchedRecords(records)
+	prefixes := make([]string, 0, len(records))
+	for _, record := range records {
+		if record.Prefix == "" {
+			out.Warnings = append(out.Warnings,
+				"matched provider "+record.Name+" has no prefix, so live requests to it cannot be identified by model prefix")
+			continue
+		}
+		prefixes = append(prefixes, record.Prefix)
+	}
+	out.ActivePrefixes = uniqueStrings(prefixes)
 
 	sortProviderStatuses := func(values []providerStatus) {
 		sort.SliceStable(values, func(i, j int) bool {
@@ -338,6 +475,7 @@ func discoverOpenAICompatibility(root map[string]any) []discoveredProvider {
 		}
 		name, _ := stringValue(providerMap, "name")
 		baseURL, _ := stringValue(providerMap, "base-url", "base_url", "url")
+		prefix, _ := stringValue(providerMap, "prefix")
 		disabled, _ := boolValue(providerMap, "disabled")
 		providerKey := name
 		apiKeys := make([]string, 0)
@@ -358,6 +496,7 @@ func discoverOpenAICompatibility(root map[string]any) []discoveredProvider {
 			Name:        name,
 			ProviderKey: providerKey,
 			URL:         baseURL,
+			Prefix:      prefix,
 			Source:      "openai-compatibility",
 			Active:      !disabled,
 			Disabled:    disabled,
@@ -423,6 +562,7 @@ func matchDiscoveredProvider(settings PluginSettings, item discoveredProvider) (
 			Name:        item.Name,
 			ProviderKey: item.ProviderKey,
 			URL:         item.URL,
+			ToFormat:    prefixCandidateFormat(item),
 			Native:      item.Native,
 		})
 	} else {
@@ -432,6 +572,7 @@ func matchDiscoveredProvider(settings PluginSettings, item discoveredProvider) (
 				ProviderKey: item.ProviderKey,
 				URL:         item.URL,
 				APIKey:      key,
+				ToFormat:    prefixCandidateFormat(item),
 				Native:      item.Native,
 			})
 		}
@@ -442,6 +583,12 @@ func matchDiscoveredProvider(settings PluginSettings, item discoveredProvider) (
 		}
 	}
 	return false, nil
+}
+
+// prefixCandidateFormat keeps the provider prefix visible to name selectors so
+// an operator can match on the same namespace clients type in the model field.
+func prefixCandidateFormat(item discoveredProvider) string {
+	return strings.TrimSpace(item.Prefix)
 }
 
 func providerIdentityKey(item discoveredProvider) string {
@@ -490,6 +637,8 @@ func publicProviderDiagnostics(in providerDiagnostics) providerDiagnostics {
 	out.MatchURL = ""
 	out.MatchProvider = ""
 	out.MatchProviders = nil
+	out.MatchModel = ""
+	out.MatchModels = nil
 	out.MatchAPIKeyConfigured = in.MatchAPIKeyConfigured
 	out.HMACSecretConfigured = in.HMACSecretConfigured
 	out.ConfigPathFound = false

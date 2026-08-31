@@ -6,7 +6,7 @@
       "name": "AGY Identity Bridge",
       "description": "CLIProxyAPI plugin that injects identity headers (X-AGY-Principal, X-AGY-Client-App) into requests going to agy2api/Antigravity providers, enabling per-device connector routing.",
       "author": "ngojclee",
-      "version": "0.1.6",
+      "version": "0.1.7",
       "repository": "https://github.com/ngojclee/agy-identity-bridge",
       "homepage": "https://github.com/ngojclee/agy-identity-bridge",
       "license": "MIT",

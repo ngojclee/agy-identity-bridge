@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"strings"
@@ -27,20 +28,82 @@ type registrationCapability struct {
 }
 
 type InterceptRequestPayload struct {
-	SourceFormat   string              `json:"source_format"`
-	ToFormat       string              `json:"to_format"`
-	Model          string              `json:"model"`
-	RequestedModel string              `json:"requested_model"`
-	Stream         bool                `json:"stream"`
-	Headers        map[string][]string `json:"headers"`
-	Body           []byte              `json:"body"`
-	Metadata       map[string]any      `json:"metadata"`
+	SourceFormat   string
+	ToFormat       string
+	Model          string
+	RequestedModel string
+	Stream         bool
+	Headers        map[string][]string
+	Body           []byte
+	Metadata       map[string]any
 }
 
 type InterceptResponsePayload struct {
-	Headers      map[string][]string `json:"headers"`
-	Body         []byte              `json:"body"`
-	ClearHeaders []string            `json:"clear_headers"`
+	// Field names are deliberately untagged. CLIProxyAPI declares
+	// pluginapi.RequestInterceptResponse without json tags, so it decodes the
+	// Go field names. Tagging these snake_case silently drops every value and
+	// turns the interceptor into a no-op.
+	Headers      map[string][]string
+	Body         []byte
+	ClearHeaders []string
+}
+
+// parseInterceptPayload accepts the Go-style keys CLIProxyAPI actually sends as
+// well as snake_case variants. mapValue normalises separators, so "ToFormat"
+// and "to_format" both resolve to the same field.
+func parseInterceptPayload(raw []byte) (InterceptRequestPayload, error) {
+	var payload InterceptRequestPayload
+	if len(raw) == 0 {
+		return payload, nil
+	}
+	var decoded map[string]any
+	if errJSON := json.Unmarshal(raw, &decoded); errJSON != nil {
+		return payload, errJSON
+	}
+	if decoded == nil {
+		return payload, nil
+	}
+	payload.SourceFormat, _ = stringValue(decoded, "source_format")
+	payload.ToFormat, _ = stringValue(decoded, "to_format")
+	payload.Model, _ = stringValue(decoded, "model")
+	payload.RequestedModel, _ = stringValue(decoded, "requested_model")
+	payload.Stream, _ = boolValue(decoded, "stream")
+	if value, ok := mapValue(decoded, "metadata"); ok {
+		payload.Metadata = asMap(value)
+	}
+	if value, ok := mapValue(decoded, "headers"); ok {
+		payload.Headers = headerMapFromAny(asMap(value))
+	}
+	if value, ok := stringValue(decoded, "body"); ok {
+		if decodedBody, errDecode := base64.StdEncoding.DecodeString(value); errDecode == nil {
+			payload.Body = decodedBody
+		}
+	}
+	return payload, nil
+}
+
+func headerMapFromAny(raw map[string]any) map[string][]string {
+	if raw == nil {
+		return nil
+	}
+	out := make(map[string][]string, len(raw))
+	for key, value := range raw {
+		switch typed := value.(type) {
+		case []any:
+			values := make([]string, 0, len(typed))
+			for _, item := range typed {
+				if text, ok := item.(string); ok {
+					values = append(values, text)
+				}
+			}
+			if len(values) > 0 {
+				out[key] = values
+			}
+		case string:
+			out[key] = []string{typed}
+		}
+	}
+	return out
 }
 
 func handleMethod(method string, request []byte) ([]byte, error) {
@@ -139,6 +202,16 @@ func pluginRegistration() registration {
 					Description: "Additional provider name/key selectors. Legacy match_provider is also accepted.",
 				},
 				{
+					Name:        "match_model",
+					Type:        pluginapi.ConfigFieldTypeString,
+					Description: "Requested model selector such as agy/* . CLIProxyAPI exposes the model, not the provider, to interceptors, so this is the reliable way to pin one OpenAI-compatible provider.",
+				},
+				{
+					Name:        "match_models",
+					Type:        pluginapi.ConfigFieldTypeArray,
+					Description: "Additional requested model selectors. Legacy match_model is also accepted.",
+				},
+				{
 					Name:        "hmac_secret_source",
 					Type:        pluginapi.ConfigFieldTypeEnum,
 					EnumValues:  []string{"env", "config", "provider_api_key", "none"},
@@ -159,16 +232,16 @@ func pluginRegistration() registration {
 }
 
 func handleInterceptAfter(request []byte) ([]byte, error) {
-	var payload InterceptRequestPayload
-	if errUnmarshal := json.Unmarshal(request, &payload); errUnmarshal != nil {
-		return errorEnvelope("parse_error", errUnmarshal.Error()), nil
+	payload, errParse := parseInterceptPayload(request)
+	if errParse != nil {
+		return errorEnvelope("parse_error", errParse.Error()), nil
 	}
 
 	settings := currentPluginSettings()
 	if !settings.Enabled {
 		return okEnvelope(InterceptResponsePayload{}), nil
 	}
-	candidate := candidateFromPayload(payload)
+	candidate := candidateFromPayload(payload, settings)
 	matched, _ := settings.shouldInterceptCandidate(candidate)
 	if !matched {
 		return okEnvelope(InterceptResponsePayload{}), nil

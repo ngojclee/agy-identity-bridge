@@ -30,6 +30,8 @@ type PluginSettings struct {
 	MatchAPIKey              string   `yaml:"match_api_key" json:"match_api_key"`
 	MatchProvider            string   `yaml:"match_provider" json:"match_provider"`
 	MatchProviders           []string `yaml:"match_providers" json:"match_providers"`
+	MatchModel               string   `yaml:"match_model" json:"match_model"`
+	MatchModels              []string `yaml:"match_models" json:"match_models"`
 	HMACSecret               string   `yaml:"hmac_secret" json:"hmac_secret"`
 	HMACSecretSource         string   `yaml:"hmac_secret_source" json:"hmac_secret_source"`
 }
@@ -83,6 +85,7 @@ func normalizeSettings(s PluginSettings) PluginSettings {
 	s.MatchURL = strings.TrimSpace(s.MatchURL)
 	s.MatchAPIKey = strings.TrimSpace(s.MatchAPIKey)
 	s.MatchProvider = strings.TrimSpace(s.MatchProvider)
+	s.MatchModel = strings.TrimSpace(s.MatchModel)
 	s.HMACSecret = strings.TrimSpace(s.HMACSecret)
 
 	seen := make(map[string]struct{}, len(s.MatchProviders)+1)
@@ -100,6 +103,22 @@ func normalizeSettings(s PluginSettings) PluginSettings {
 		providers = append(providers, value)
 	}
 	s.MatchProviders = providers
+
+	modelSeen := make(map[string]struct{}, len(s.MatchModels)+1)
+	models := make([]string, 0, len(s.MatchModels)+1)
+	for _, value := range append(s.MatchModels, s.MatchModel) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		key := strings.ToLower(value)
+		if _, exists := modelSeen[key]; exists {
+			continue
+		}
+		modelSeen[key] = struct{}{}
+		models = append(models, value)
+	}
+	s.MatchModels = models
 	return s
 }
 
@@ -300,6 +319,8 @@ func findPluginConfig(root map[string]any) (map[string]any, bool) {
 		"match_api_key",
 		"match_provider",
 		"match_providers",
+		"match_model",
+		"match_models",
 		"hmac_secret",
 		"hmac_secret_source",
 	} {
@@ -343,6 +364,12 @@ func settingsFromMap(base PluginSettings, raw map[string]any) PluginSettings {
 	}
 	if values, ok := stringSliceValue(raw, "match_providers", "match-providers"); ok {
 		base.MatchProviders = values
+	}
+	if value, ok := stringValue(raw, "match_model", "match-model"); ok {
+		base.MatchModel = value
+	}
+	if values, ok := stringSliceValue(raw, "match_models", "match-models"); ok {
+		base.MatchModels = values
 	}
 	if value, ok := stringValue(raw, "hmac_secret", "hmac-secret"); ok {
 		base.HMACSecret = value
@@ -545,6 +572,7 @@ func (s PluginSettings) shouldIntercept(providerName, providerURL string) bool {
 func (s PluginSettings) shouldInterceptCandidate(candidate providerCandidate) (bool, []string) {
 	s = normalizeSettings(s)
 	nameValues := []string{candidate.Name, candidate.ProviderKey, candidate.ToFormat}
+	modelValues := []string{candidate.RequestedModel, candidate.Model}
 	criteriaCount := 0
 	matchedCount := 0
 	matchedBy := make([]string, 0, 4)
@@ -577,6 +605,13 @@ func (s PluginSettings) shouldInterceptCandidate(candidate providerCandidate) (b
 			matchedBy = append(matchedBy, "api_key")
 		}
 	}
+	for _, pattern := range s.MatchModels {
+		criteriaCount++
+		if anyTextMatch([]string{pattern}, modelValues) {
+			matchedCount++
+			matchedBy = append(matchedBy, "model")
+		}
+	}
 
 	if criteriaCount == 0 {
 		if !s.AutoDiscover {
@@ -587,6 +622,13 @@ func (s PluginSettings) shouldInterceptCandidate(candidate providerCandidate) (b
 				return false, nil
 			}
 			return true, []string{"native-antigravity"}
+		}
+		// CLIProxyAPI does not expose the provider name or base URL to the
+		// after-auth interceptor for OpenAI-compatible providers, so the model
+		// prefix resolved back to a matching config provider is the reliable
+		// signal for auto discovery.
+		if candidate.ResolvedPrefix != "" {
+			return true, []string{"model-prefix:" + candidate.ResolvedPrefix}
 		}
 		if anyTextMatch([]string{"*antigravity*", "*agy2api*"}, nameValues) ||
 			matchText("*antigravity*", candidate.URL) ||
@@ -615,6 +657,7 @@ func (s PluginSettings) configuredSelectorCount() int {
 		count++
 	}
 	count += len(s.MatchProviders)
+	count += len(s.MatchModels)
 	return count
 }
 
