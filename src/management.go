@@ -546,7 +546,7 @@ func providerEditorHTML(data providerEditorData) string {
 <body>
 <div class="shell">
 <main class="content">
-<div class="top"><div class="title"><h1>AGY Identity Bridge</h1><div class="muted">Provider-shaped mirror controls for ln.Antigravity</div></div><div class="actions"><a class="btn" href="/v0/resource/plugins/%s/status">Back to summary</a><button class="btn" onclick="location.reload()">Refresh</button></div></div>
+<div class="top"><div class="title"><h1>AGY Identity Bridge</h1><div class="muted">Editing the source provider mirrored into ln.Antigravity</div></div><div class="actions"><a class="btn" href="/v0/resource/plugins/%s/status">Back to summary</a><button class="btn" onclick="location.reload()">Refresh</button></div></div>
 <section class="card"><div class="section-title">Route state</div><div class="metrics">
 <div class="metric"><span>Replacement mode</span><strong id="metric-mode">%s</strong></div>
 <div class="metric"><span>Published models</span><strong id="metric-published">%d</strong></div>
@@ -562,7 +562,7 @@ func providerEditorHTML(data providerEditorData) string {
 %s
 <div class="card"><div class="section-title">Management access</div><div class="field"><label for="mkey">CPA management key</label><input id="mkey" type="password" autocomplete="current-password" placeholder="Required for Load, Save, Test, Fetch"></div><div class="actions"><button class="btn" id="load-secure">Load secure config</button><button class="btn" id="clear-key">Clear</button></div></div>
 <form id="editor-form" class="card">
-<div class="section-title">Provider</div>
+<div class="section-title">Source provider</div>
 <input type="hidden" id="original_name"><input type="hidden" id="original_prefix"><input type="hidden" id="original_base_url">
 <div class="grid"><div class="field"><label for="name">Name</label><input id="name"></div><div class="field"><label for="prefix">Prefix</label><input id="prefix" placeholder="agy"></div></div>
 <div class="field"><label for="base_url">Base URL</label><input id="base_url" placeholder="http://host:port/v1"></div>

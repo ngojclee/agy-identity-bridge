@@ -308,19 +308,19 @@ Go 1.26 and GCC:
 
 ```sh
 make test
-make build VERSION=0.2.7
+make build VERSION=0.2.8
 ```
 
 The output is:
 
 ```text
-dist/agy-identity-bridge-v0.2.7.so
+dist/agy-identity-bridge-v0.2.8.so
 ```
 
 The GitHub Actions workflow builds and packages:
 
 ```text
-agy-identity-bridge_0.2.7_linux_amd64.zip
+agy-identity-bridge_0.2.8_linux_amd64.zip
 checksums.txt
 ```
 

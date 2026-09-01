@@ -32,13 +32,9 @@ type hostAuthGetResponse struct {
 
 // hostCall invokes a CPA host callback and unwraps its JSON envelope.
 func hostCall(method string, payload any) (json.RawMessage, error) {
-	var request []byte
-	if payload != nil {
-		var errMarshal error
-		request, errMarshal = json.Marshal(payload)
-		if errMarshal != nil {
-			return nil, errMarshal
-		}
+	request, errMarshal := marshalHostPayload(payload)
+	if errMarshal != nil {
+		return nil, errMarshal
 	}
 	raw, ok := callHost(method, request)
 	if len(raw) == 0 {
@@ -58,6 +54,20 @@ func hostCall(method string, payload any) (json.RawMessage, error) {
 		return nil, fmt.Errorf("host call %s failed", method)
 	}
 	return response.Result, nil
+}
+
+func marshalHostPayload(payload any) ([]byte, error) {
+	if payload == nil {
+		return nil, nil
+	}
+	switch typed := payload.(type) {
+	case []byte:
+		return typed, nil
+	case json.RawMessage:
+		return []byte(typed), nil
+	default:
+		return json.Marshal(payload)
+	}
 }
 
 func hostLog(level, message string, fields map[string]any) {
