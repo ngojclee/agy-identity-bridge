@@ -99,3 +99,14 @@ match_providers:
 		t.Fatalf("configured selector count = %d, want 2", settings.configuredSelectorCount())
 	}
 }
+
+func TestAgy2apiIdentitySecretDecodesFromConfig(t *testing.T) {
+	t.Setenv("CPA_CONFIG_PATH", "Z:\\missing\\cpa-config.yaml")
+	t.Setenv("AGY_PLUGIN_SECRET", "")
+	settings := decodePluginSettings([]byte(`
+agy2api_identity_secret: dedicated-secret
+`))
+	if settings.Agy2apiIdentitySecret != "dedicated-secret" {
+		t.Fatalf("agy2api_identity_secret = %q, want dedicated-secret", settings.Agy2apiIdentitySecret)
+	}
+}

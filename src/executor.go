@@ -279,6 +279,7 @@ func handleExecutorExecute(raw []byte) ([]byte, error) {
 	if errDecode := json.Unmarshal(responseRaw, &response); errDecode != nil {
 		return errorEnvelope("upstream_decode_failed", errDecode.Error()), nil
 	}
+	recordExecutorUpstreamStatus(response.StatusCode)
 	if response.StatusCode < 200 || response.StatusCode > 299 {
 		// surfaced verbatim so agy2api's own error detail reaches the client
 		return errorEnvelope("upstream_error", fmt.Sprintf(
@@ -365,6 +366,7 @@ func handleExecutorCountTokens(raw []byte) ([]byte, error) {
 	if errDecode := json.Unmarshal(responseRaw, &response); errDecode != nil {
 		return errorEnvelope("upstream_decode_failed", errDecode.Error()), nil
 	}
+	recordExecutorUpstreamStatus(response.StatusCode)
 	return okEnvelope(executorEnvelope{
 		Payload: b64(unb64(response.Body)),
 		Headers: response.Headers,

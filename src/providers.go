@@ -154,7 +154,12 @@ type providerDiagnostics struct {
 	ExecutorProvider         string           `json:"executor_provider"`
 	ModelNamespace           string           `json:"model_namespace,omitempty"`
 	MirroredProviderEnabled  bool             `json:"mirrored_provider_enabled"`
+	ReplacementMode          string           `json:"replacement_mode,omitempty"`
+	ProviderOriginalEnabled  bool             `json:"provider_original_enabled"`
+	Agy2apiSecretConfigured  bool             `json:"agy2api_identity_secret_configured"`
 	ModelsServed             bool             `json:"models_served"`
+	LastExecutorStatus       int              `json:"last_executor_status,omitempty"`
+	LastExecutorErrorAt      string           `json:"last_executor_error_at,omitempty"`
 	InterceptCount           uint64           `json:"intercept_count"`
 	LastInterceptAt          string           `json:"last_intercept_at,omitempty"`
 	LastInterceptProvider    string           `json:"last_intercept_provider,omitempty"`
@@ -167,6 +172,23 @@ var interceptState struct {
 	count    uint64
 	lastAt   time.Time
 	lastName string
+}
+
+// executorRuntimeState tracks the most recent executor upstream response so
+// diagnostics can flag a signature mismatch (agy2api configured with a
+// different AGY_IDENTITY_BRIDGE_SECRET) instead of leaving the operator to
+// guess why requests fail with 401.
+var executorRuntimeState struct {
+	sync.Mutex
+	lastStatus int
+	lastAt     time.Time
+}
+
+func recordExecutorUpstreamStatus(status int) {
+	executorRuntimeState.Lock()
+	executorRuntimeState.lastStatus = status
+	executorRuntimeState.lastAt = time.Now().UTC()
+	executorRuntimeState.Unlock()
 }
 
 func candidateFromPayload(payload InterceptRequestPayload, settings PluginSettings) providerCandidate {
@@ -279,6 +301,9 @@ func firstHeaderValue(headers map[string][]string, keys ...string) string {
 }
 
 func hmacSecretForCandidate(settings PluginSettings, candidate providerCandidate) string {
+	if settings.Agy2apiIdentitySecret != "" {
+		return settings.Agy2apiIdentitySecret
+	}
 	if settings.HMACSecretSource == "provider_api_key" {
 		return strings.TrimSpace(candidate.APIKey)
 	}
@@ -426,18 +451,51 @@ func scanProviderDiagnostics() providerDiagnostics {
 		out.MirroredBaseURL = redactURL(spec.BaseURL)
 		out.MirroredHasAPIKey = spec.primaryAPIKey() != ""
 		out.MirroredProviderEnabled = spec.Enabled
+		out.ProviderOriginalEnabled = spec.Enabled
 		out.MirroredModelCount = len(spec.modelInfos(settings.ModelNamespace))
 		out.ModelsServed = canServeModels(settings, spec)
+		switch {
+		case strings.TrimSpace(settings.ModelNamespace) != "":
+			out.ReplacementMode = "namespace"
+		case !spec.Enabled:
+			out.ReplacementMode = "active"
+		default:
+			out.ReplacementMode = "withheld"
+		}
 		if settings.ExecutorEnabled && !out.ModelsServed {
 			out.Warnings = append(out.Warnings,
 				"executor mode is on but models are withheld: the mirrored provider is still enabled and model_namespace is empty, so publishing the same model IDs would let CLIProxyAPI load balance across both paths. Set model_namespace for a test, or disable the mirrored provider.")
-		} else if settings.ExecutorEnabled && out.MirroredModelCount == 0 {
+		}
+		if settings.ExecutorEnabled && out.MirroredModelCount == 0 {
 			out.Warnings = append(out.Warnings,
 				"executor mode is on but the mirrored provider declares no models; clients would see an empty model list")
 		}
+		if out.ReplacementMode == "active" {
+			out.Warnings = append(out.Warnings,
+				"executor mode is the only serving path for these models: re-enable the mirrored provider before disabling or uninstalling this plugin, or traffic will break")
+		}
 	} else {
 		out.Warnings = append(out.Warnings,
-			"no configured openai-compatibility provider matched, so executor mode has nothing to mirror")
+		"no configured openai-compatibility provider matched, so executor mode has nothing to mirror")
+	}
+
+	out.Agy2apiSecretConfigured = settings.Agy2apiIdentitySecret != ""
+	executorRuntimeState.Lock()
+	lastStatus := executorRuntimeState.lastStatus
+	lastAt := executorRuntimeState.lastAt
+	executorRuntimeState.Unlock()
+	if lastStatus == 401 || lastStatus == 403 {
+		out.LastExecutorStatus = lastStatus
+		if !lastAt.IsZero() {
+			out.LastExecutorErrorAt = lastAt.Format(time.RFC3339)
+		}
+		if settings.hmacSecret() != "" {
+			out.Warnings = append(out.Warnings,
+				"agy2api signature mismatch - verify AGY_IDENTITY_BRIDGE_SECRET matches the configured plugin secret")
+		} else {
+			out.Warnings = append(out.Warnings,
+				"agy2api rejected the upstream request - configure agy2api_identity_secret or AGY_PLUGIN_SECRET so the plugin can sign identity headers")
+		}
 	}
 
 	sortProviderStatuses := func(values []providerStatus) {

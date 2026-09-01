@@ -72,7 +72,7 @@ func TestExtractProviderSpecMirrorsMatchingProvider(t *testing.T) {
 	if spec.BaseURL != "http://10.21.4.101:8123/v1" || spec.upstreamBaseURL() != "http://10.21.4.101:8123/v1" {
 		t.Fatalf("base url = %q", spec.BaseURL)
 	}
-	if spec.Priority != 7 || !spec.DisableCooling {
+	if spec.Priority != 107 || !spec.DisableCooling {
 		t.Fatalf("priority/cooling = %+v", spec)
 	}
 	if spec.Headers["X-Custom"] != "keep-me" {
@@ -300,6 +300,229 @@ func TestExecutorProviderKeyIsNormalised(t *testing.T) {
 	if settings.ExecutorProvider != defaultExecutorProvider {
 		t.Fatalf("default provider key = %q", settings.ExecutorProvider)
 	}
+}
+
+// agy2api_identity_secret is the strongest source: it wins over the legacy
+// hmac_secret config field and the CPA container AGY_PLUGIN_SECRET env var.
+func TestHMACSecretPriorityDedicatedOverEnvAndLegacyConfig(t *testing.T) {
+	loadMirror(t)
+	settings := currentPluginSettings()
+	settings.Agy2apiIdentitySecret = "dedicated-secret"
+	settings.HMACSecret = "legacy-secret"
+	settings.HMACSecretSource = "config"
+	t.Setenv("AGY_PLUGIN_SECRET", "env-secret")
+	if got := settings.hmacSecret(); got != "dedicated-secret" {
+		t.Fatalf("secret = %q, want dedicated-secret", got)
+	}
+	if got := settings.hmacSecretSource(); got != "agy2api_identity_secret" {
+		t.Fatalf("secret source = %q, want agy2api_identity_secret", got)
+	}
+	if got := hmacSecretForCandidate(settings, providerCandidate{APIKey: "provider-key"}); got != "dedicated-secret" {
+		t.Fatalf("candidate secret = %q, want dedicated-secret", got)
+	}
+}
+
+// With no dedicated secret, the legacy config field beats the environment.
+func TestHMACSecretPriorityLegacyConfigOverEnv(t *testing.T) {
+	loadMirror(t)
+	settings := currentPluginSettings()
+	settings.Agy2apiIdentitySecret = ""
+	settings.HMACSecret = "legacy-secret"
+	settings.HMACSecretSource = "config"
+	t.Setenv("AGY_PLUGIN_SECRET", "env-secret")
+	if got := settings.hmacSecret(); got != "legacy-secret" {
+		t.Fatalf("secret = %q, want legacy-secret", got)
+	}
+	if got := settings.hmacSecretSource(); got != "config" {
+		t.Fatalf("secret source = %q, want config", got)
+	}
+}
+
+// With no config secret at all, the env var is the fallback.
+func TestHMACSecretPriorityEnvOverNothing(t *testing.T) {
+	loadMirror(t)
+	settings := currentPluginSettings()
+	settings.Agy2apiIdentitySecret = ""
+	settings.HMACSecret = ""
+	settings.HMACSecretSource = "env"
+	t.Setenv("AGY_PLUGIN_SECRET", "env-secret")
+	if got := settings.hmacSecret(); got != "env-secret" {
+		t.Fatalf("secret = %q, want env-secret", got)
+	}
+	if got := settings.hmacSecretSource(); got != "env" {
+		t.Fatalf("secret source = %q, want env", got)
+	}
+}
+
+// provider_api_key is the weakest source: it only applies when no stronger
+// source has a value, and it is resolved per candidate from the matched
+// provider's own key list.
+func TestHMACSecretPriorityProviderAPIKeyIsFallback(t *testing.T) {
+	loadMirror(t)
+	settings := currentPluginSettings()
+	settings.Agy2apiIdentitySecret = ""
+	settings.HMACSecret = ""
+	settings.HMACSecretSource = "provider_api_key"
+	t.Setenv("AGY_PLUGIN_SECRET", "")
+	candidate := providerCandidate{APIKey: "provider-key"}
+	if got := hmacSecretForCandidate(settings, candidate); got != "provider-key" {
+		t.Fatalf("candidate secret = %q, want provider-key", got)
+	}
+	if got := settings.hmacSecretSource(); got != "provider_api_key" {
+		t.Fatalf("secret source = %q, want provider_api_key", got)
+	}
+}
+
+// The diagnostics payload and status page must never contain the secret value.
+func TestDiagnosticsNeverLeaksAgy2apiSecret(t *testing.T) {
+	loadMirror(t)
+	settings := currentPluginSettings()
+	settings.Agy2apiIdentitySecret = "super-secret-value"
+	settings.HMACSecret = "legacy-secret-value"
+	withSettings(t, settings)
+	diagnostics := scanProviderDiagnostics()
+	if diagnostics.Agy2apiSecretConfigured != true {
+		t.Fatalf("agy2api_identity_secret_configured = %v", diagnostics.Agy2apiSecretConfigured)
+	}
+	raw, errMarshal := json.Marshal(diagnostics)
+	if errMarshal != nil {
+		t.Fatal(errMarshal)
+	}
+	for _, leak := range []string{"super-secret-value", "legacy-secret-value"} {
+		if strings.Contains(string(raw), leak) {
+			t.Fatalf("secret %q leaked into diagnostics: %s", leak, raw)
+		}
+	}
+	public := publicProviderDiagnostics(diagnostics)
+	publicRaw, errPublic := json.Marshal(public)
+	if errPublic != nil {
+		t.Fatal(errPublic)
+	}
+	for _, leak := range []string{"super-secret-value", "legacy-secret-value"} {
+		if strings.Contains(string(publicRaw), leak) {
+			t.Fatalf("secret %q leaked into public diagnostics: %s", leak, publicRaw)
+		}
+	}
+	settingsView := managementSettings()
+	settingsRaw, errSettings := json.Marshal(settingsView)
+	if errSettings != nil {
+		t.Fatal(errSettings)
+	}
+	for _, leak := range []string{"super-secret-value", "legacy-secret-value"} {
+		if strings.Contains(string(settingsRaw), leak) {
+			t.Fatalf("secret %q leaked into settings view: %s", leak, settingsRaw)
+		}
+	}
+}
+
+// The plugin mirrors the original provider's priority but boosts it well above
+// the original so a future CPA version that honors priority during model
+// collision picks the plugin provider first.
+func TestProviderMirrorPriorityBoost(t *testing.T) {
+	loadMirror(t)
+	root, _ := parseYAMLMap([]byte(mirrorConfigYAML))
+	spec, found := extractProviderSpec(root, currentPluginSettings())
+	if !found {
+		t.Fatal("no mirrored provider")
+	}
+	// The fixture provider has priority 7. max(7+100, 10) = 107.
+	if spec.Priority != 107 {
+		t.Fatalf("priority = %d, want 107", spec.Priority)
+	}
+}
+
+// While the mirrored provider is still enabled and no namespace is set, the
+// plugin withholds models: replacement_mode must report "withheld".
+func TestReplacementModeWithheldWhileOriginalEnabled(t *testing.T) {
+	loadMirror(t)
+	settings := currentPluginSettings()
+	settings.ExecutorEnabled = true
+	settings.ModelNamespace = ""
+	withSettings(t, settings)
+	diagnostics := scanProviderDiagnostics()
+	if diagnostics.ReplacementMode != "withheld" {
+		t.Fatalf("replacement_mode = %q, want withheld", diagnostics.ReplacementMode)
+	}
+	if !diagnostics.ProviderOriginalEnabled {
+		t.Fatal("provider_original_enabled should be true while the original is live")
+	}
+}
+
+// A test namespace keeps the original live but publishes under a prefix.
+func TestReplacementModeNamespaceWhileTesting(t *testing.T) {
+	loadMirror(t)
+	settings := currentPluginSettings()
+	settings.ExecutorEnabled = true
+	settings.ModelNamespace = "spike."
+	withSettings(t, settings)
+	diagnostics := scanProviderDiagnostics()
+	if diagnostics.ReplacementMode != "namespace" {
+		t.Fatalf("replacement_mode = %q, want namespace", diagnostics.ReplacementMode)
+	}
+	if !diagnostics.ProviderOriginalEnabled {
+		t.Fatal("provider_original_enabled should be true while the original is live")
+	}
+}
+
+// Once the original provider is disabled, the plugin serves the exact model
+// names: replacement_mode flips to "active" and the status page must warn the
+// operator that the plugin is now the only serving path.
+func TestReplacementModeActiveAfterOriginalDisabled(t *testing.T) {
+	loadMirror(t)
+	settings := currentPluginSettings()
+	settings.ExecutorEnabled = true
+	settings.ModelNamespace = ""
+	settings.AutoDiscover = false
+	settings.MatchProviders = []string{"DisabledAGY2API"}
+	withSettings(t, settings)
+	storeProviderSpec(providerSpec{}, false)
+	diagnostics := scanProviderDiagnostics()
+	if diagnostics.ReplacementMode != "active" {
+		t.Fatalf("replacement_mode = %q, want active", diagnostics.ReplacementMode)
+	}
+	if diagnostics.ProviderOriginalEnabled {
+		t.Fatal("provider_original_enabled should be false for a disabled original")
+	}
+	var warned bool
+	for _, warning := range diagnostics.Warnings {
+		if strings.Contains(warning, "only serving path") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatalf("missing single-path warning: %+v", diagnostics.Warnings)
+	}
+}
+
+// When agy2api rejects the executor call with 401, diagnostics must surface a
+// signature mismatch hint instead of leaving the operator to guess.
+func TestExecutor401SurfacesSignatureMismatchWarning(t *testing.T) {
+	loadMirror(t)
+	settings := currentPluginSettings()
+	settings.Agy2apiIdentitySecret = "plugin-secret"
+	withSettings(t, settings)
+	recordExecutorUpstreamStatus(200)
+	diagnostics := scanProviderDiagnostics()
+	for _, warning := range diagnostics.Warnings {
+		if strings.Contains(warning, "signature mismatch") {
+			t.Fatalf("unexpected mismatch warning without a 401: %+v", diagnostics.Warnings)
+		}
+	}
+	recordExecutorUpstreamStatus(401)
+	diagnostics = scanProviderDiagnostics()
+	if diagnostics.LastExecutorStatus != 401 {
+		t.Fatalf("last_executor_status = %d, want 401", diagnostics.LastExecutorStatus)
+	}
+	var warned bool
+	for _, warning := range diagnostics.Warnings {
+		if strings.Contains(warning, "signature mismatch") {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatalf("missing signature mismatch warning: %+v", diagnostics.Warnings)
+	}
+	recordExecutorUpstreamStatus(200)
 }
 
 func TestDiagnosticsReportsMirroredProvider(t *testing.T) {

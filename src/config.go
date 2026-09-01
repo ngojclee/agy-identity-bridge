@@ -34,6 +34,7 @@ type PluginSettings struct {
 	MatchModels              []string `yaml:"match_models" json:"match_models"`
 	HMACSecret               string   `yaml:"hmac_secret" json:"hmac_secret"`
 	HMACSecretSource         string   `yaml:"hmac_secret_source" json:"hmac_secret_source"`
+	Agy2apiIdentitySecret    string   `yaml:"agy2api_identity_secret" json:"agy2api_identity_secret"`
 
 	// Executor mode makes this plugin the caller for the mirrored provider, so
 	// identity headers survive to agy2api. Disabled by default: installing a
@@ -100,6 +101,7 @@ func normalizeSettings(s PluginSettings) PluginSettings {
 	s.MatchProvider = strings.TrimSpace(s.MatchProvider)
 	s.MatchModel = strings.TrimSpace(s.MatchModel)
 	s.HMACSecret = strings.TrimSpace(s.HMACSecret)
+	s.Agy2apiIdentitySecret = strings.TrimSpace(s.Agy2apiIdentitySecret)
 
 	seen := make(map[string]struct{}, len(s.MatchProviders)+1)
 	providers := make([]string, 0, len(s.MatchProviders)+1)
@@ -361,6 +363,7 @@ func findPluginConfig(root map[string]any) (map[string]any, bool) {
 		"match_models",
 		"hmac_secret",
 		"hmac_secret_source",
+		"agy2api_identity_secret",
 		"executor_enabled",
 		"executor_provider",
 		"model_namespace",
@@ -417,6 +420,9 @@ func settingsFromMap(base PluginSettings, raw map[string]any) PluginSettings {
 	}
 	if value, ok := stringValue(raw, "hmac_secret_source", "hmac-secret-source"); ok {
 		base.HMACSecretSource = value
+	}
+	if value, ok := stringValue(raw, "agy2api_identity_secret", "agy2api-identity-secret"); ok {
+		base.Agy2apiIdentitySecret = value
 	}
 	if value, ok := boolValue(raw, "executor_enabled", "executor-enabled"); ok {
 		base.ExecutorEnabled = value
@@ -574,40 +580,46 @@ func stringSliceValue(raw map[string]any, keys ...string) ([]string, bool) {
 	}
 }
 
+// hmacSecret returns the HMAC signing key, resolved in priority order:
+// 1. agy2api_identity_secret (dedicated plugin config field)
+// 2. hmac_secret (legacy plugin config field)
+// 3. AGY_PLUGIN_SECRET environment variable (CPA container env)
+// 4. provider_api_key (only when hmac_secret_source=provider_api_key, resolved
+//    per candidate in hmacSecretForCandidate)
+// 5. empty, which leaves requests unsigned. agy2api rejects unsigned requests,
+//    so an empty result with executor mode on is a configuration error the
+//    status page surfaces.
 func (s PluginSettings) hmacSecret() string {
-	switch s.HMACSecretSource {
-	case "none", "provider_api_key":
-		return ""
-	case "config":
-		return s.HMACSecret
-	default:
-		if value := strings.TrimSpace(os.Getenv("AGY_PLUGIN_SECRET")); value != "" {
-			return value
-		}
+	if s.Agy2apiIdentitySecret != "" {
+		return s.Agy2apiIdentitySecret
+	}
+	if s.HMACSecret != "" {
 		return s.HMACSecret
 	}
+	if value := strings.TrimSpace(os.Getenv("AGY_PLUGIN_SECRET")); value != "" {
+		return value
+	}
+	return ""
 }
 
+// hmacSecretSource reports which entry in the priority chain will actually
+// sign, for diagnostics. provider_api_key mode only applies when no stronger
+// source is configured, because the dedicated and config secrets are static
+// and safer than reusing the upstream provider key.
 func (s PluginSettings) hmacSecretSource() string {
-	switch s.HMACSecretSource {
-	case "config":
-		if s.HMACSecret != "" {
-			return "config"
-		}
-		return "none"
-	case "provider_api_key":
-		return "provider_api_key"
-	case "none":
-		return "none"
-	default:
-		if strings.TrimSpace(os.Getenv("AGY_PLUGIN_SECRET")) != "" {
-			return "env"
-		}
-		if s.HMACSecret != "" {
-			return "config"
-		}
-		return "none"
+	if s.Agy2apiIdentitySecret != "" {
+		return "agy2api_identity_secret"
 	}
+	if s.HMACSecret != "" {
+		return "config"
+	}
+	if strings.TrimSpace(os.Getenv("AGY_PLUGIN_SECRET")) != "" {
+		return "env"
+	}
+	if s.HMACSecretSource == "provider_api_key" {
+		return "provider_api_key"
+	}
+	return "none"
 }
 
 func (s PluginSettings) shouldIntercept(providerName, providerURL string) bool {

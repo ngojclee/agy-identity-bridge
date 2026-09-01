@@ -101,6 +101,7 @@ func managementSettings() map[string]any {
 		"configured_selector_count":  settings.configuredSelectorCount(),
 		"hmac_secret_configured":     settings.hmacSecret() != "",
 		"hmac_secret_source":         settings.hmacSecretSource(),
+		"agy2api_identity_secret_configured": settings.Agy2apiIdentitySecret != "",
 		"config_path_found":          snapshot.ConfigPathFound,
 		"plugin_config_found":        snapshot.PluginConfigFound,
 		"executor_enabled":           settings.ExecutorEnabled,
@@ -140,7 +141,12 @@ func publicStatusPage(diagnostics providerDiagnostics) string {
 	if public.MirroredProvider != "" {
 		executorState := "off, routing unchanged"
 		if public.ExecutorEnabled {
-			executorState = "on, this plugin serves provider " + html.EscapeString(public.ExecutorProvider)
+			mode := public.ReplacementMode
+			if mode == "" {
+				mode = "unknown"
+			}
+			executorState = "on, replacement mode " + html.EscapeString(mode) +
+				", serves provider " + html.EscapeString(public.ExecutorProvider)
 		}
 		mirrorSummary = fmt.Sprintf(
 			"%s &rarr; %d models &middot; api key %s &middot; executor %s",

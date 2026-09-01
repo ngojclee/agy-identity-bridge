@@ -111,6 +111,11 @@ metadata is mapped the same way the host does it, so alias wins over name,
 thinking still advertises `low`, `medium` and `high`. Nothing is invented: if the
 provider declares no models, the plugin publishes none.
 
+The mirrored provider keeps the original's priority as a base and adds a boost:
+`priority = max(original priority + 100, 10)`. Today CLIProxyAPI ignores
+priority when two providers publish the same model ID, but if a future version
+starts honoring it, the plugin provider wins instead of splitting traffic.
+
 `executor_enabled` defaults to false, and installing a new plugin version does
 not change routing on its own.
 
@@ -126,9 +131,48 @@ To finish the switch, disable the mirrored provider in CPA config and clear
 `model_namespace`. The plugin then publishes the exact model names clients
 already use.
 
+### Replacement modes
+
+The status endpoint reports `replacement_mode` so the operator always knows
+which path serves a model:
+
+- `withheld`: executor is on, the original provider is still enabled, and
+  `model_namespace` is empty. The plugin publishes nothing; the original
+  provider serves all traffic.
+- `namespace`: executor is on and `model_namespace` is set. The plugin publishes
+  the mirrored models under the namespace prefix for parallel testing while the
+  original keeps serving the un-prefixed names.
+- `active`: executor is on, `model_namespace` is empty, and the original
+  provider is disabled in CPA config. The plugin is the only serving path for
+  these models; the status page warns that re-enabling the original provider is
+  required before disabling or uninstalling the plugin.
+
+`provider_original_enabled` mirrors the original provider's `disabled` flag so
+the transition can be verified from diagnostics alone. CPA notifies the plugin
+through `plugin.reconfigure` whenever `config.yaml` changes, so disabling the
+original provider in the CPA UI takes effect without a restart.
+
 ## HMAC Secret
 
-The default source is the `AGY_PLUGIN_SECRET` environment variable:
+The signing key is resolved in strict priority order:
+
+1. `agy2api_identity_secret`: the dedicated plugin config field. When set, it
+   wins over every other source, including an explicit `none`.
+2. `hmac_secret`: the legacy plugin config field.
+3. `AGY_PLUGIN_SECRET`: the CPA container environment variable.
+4. `provider_api_key`: only when `hmac_secret_source: provider_api_key` and no
+   stronger source has a value.
+
+agy2api verifies the signature on every request, so an unsigned request is
+rejected with 401. When the executor sees that happen, diagnostics add a
+signature mismatch warning and record the failing status in
+`last_executor_status`, which usually means the plugin secret and the agy2api
+`AGY_IDENTITY_BRIDGE_SECRET` do not match.
+
+The dedicated field is write-only: `GET /settings` and diagnostics report
+`agy2api_identity_secret_configured: true` but never the value itself.
+
+The legacy `hmac_secret_source` selector still exists for compatibility:
 
 ```yaml
 plugins:
@@ -137,16 +181,34 @@ plugins:
       hmac_secret_source: env
 ```
 
-Other explicit modes are:
-
-- `hmac_secret_source: provider_api_key`: sign with the selected provider API
-  key when one is available. This is not available for native OAuth auths.
-- `hmac_secret_source: none`: do not add `X-AGY-Signature`.
-- `hmac_secret_source: config` plus `hmac_secret`: supported for controlled
-  deployments, but environment injection is preferred.
+Its remaining effect: `provider_api_key` signs with the selected provider API
+key when no stronger source is configured (not available for native OAuth
+auths), and `none` suppresses signing only when no secret is configured
+anywhere. Prefer setting `agy2api_identity_secret` (or `AGY_PLUGIN_SECRET`) and
+leaving the selector alone.
 
 The receiver must use the same signature contract. The plugin never returns
 the secret or raw provider API keys in diagnostics.
+
+## Rollback
+
+The plugin never edits `config.yaml` or touches provider credentials, so
+rollback is a CPA UI operation only:
+
+1. Re-enable the original `Antigravity` provider in CPA
+   (`openai-compatibility`, toggle the provider back on). CPA reloads the
+   config, the plugin receives `plugin.reconfigure`, the collision guard
+   re-engages, and the plugin withholds its models again. Traffic returns to
+   CPA's built-in OpenAI executor with the original configuration untouched.
+2. Optionally set `executor_enabled: false` in the plugin config (or disable
+   the plugin) to remove the executor path entirely. Models published by the
+   plugin disappear; the interceptor keeps running so identity headers keep
+   working for the original provider path.
+
+Order matters: re-enable the original provider **before** disabling or
+uninstalling the plugin. While `replacement_mode` is `active`, the plugin is the
+only serving path for the mirrored models, and removing it without re-enabling
+the original would take those models offline.
 
 ## Diagnostics
 
@@ -214,19 +276,19 @@ Go 1.26 and GCC:
 
 ```sh
 make test
-make build VERSION=0.1.8
+make build VERSION=0.2.0
 ```
 
 The output is:
 
 ```text
-dist/agy-identity-bridge-v0.1.8.so
+dist/agy-identity-bridge-v0.2.0.so
 ```
 
 The GitHub Actions workflow builds and packages:
 
 ```text
-agy-identity-bridge_0.1.8_linux_amd64.zip
+agy-identity-bridge_0.2.0_linux_amd64.zip
 checksums.txt
 ```
 

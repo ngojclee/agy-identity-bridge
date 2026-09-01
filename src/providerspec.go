@@ -200,6 +200,12 @@ func extractProviderSpec(root map[string]any, settings PluginSettings) (provider
 			continue
 		}
 		priority, _ := intValue(providerMap, "priority")
+		// The plugin provider is a replacement, not a peer: give it enough
+		// headroom to win against the original if a future CPA version starts
+		// honoring priority during model collision resolution. The original's
+		// priority is preserved as an offset so relative ordering of multiple
+		// mirrors stays meaningful.
+		mirroredPriority := maxInt(priority+100, 10)
 		cooling, _ := boolValue(providerMap, "disable-cooling", "disable_cooling")
 		spec := providerSpec{
 			Name:           name,
@@ -207,7 +213,7 @@ func extractProviderSpec(root map[string]any, settings PluginSettings) (provider
 			BaseURL:        baseURL,
 			APIKeys:        apiKeys,
 			Headers:        compatHeaders(providerMap),
-			Priority:       priority,
+			Priority:       mirroredPriority,
 			DisableCooling: cooling,
 			Models:         compatModels(providerMap),
 			Enabled:        !disabled,
