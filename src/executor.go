@@ -41,12 +41,9 @@ func ensureAuthRecord(spec providerSpec, settings PluginSettings) error {
 	if errMarshal != nil {
 		return errMarshal
 	}
-	saveRequest, errMarshal2 := json.Marshal(map[string]any{
+	saveRequest := map[string]any{
 		"name": settings.ExecutorProvider + ".json",
 		"json": json.RawMessage(authJSON),
-	})
-	if errMarshal2 != nil {
-		return fmt.Errorf("marshal auth save request: %w", errMarshal2)
 	}
 	_, errCall := hostCall(pluginabi.MethodHostAuthSave, saveRequest)
 	if errCall != nil {

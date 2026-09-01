@@ -162,6 +162,38 @@ func TestModelNamespaceOverridesOriginalPrefixForExecutor(t *testing.T) {
 	}
 }
 
+func TestExecutorAuthSaveRequestEmbedsJSONObject(t *testing.T) {
+	loadMirror(t)
+	root, _ := parseYAMLMap([]byte(mirrorConfigYAML))
+	spec, found := extractProviderSpec(root, currentPluginSettings())
+	if !found {
+		t.Fatal("no mirrored provider")
+	}
+	authJSON, errJSON := executorAuthJSON(spec, currentPluginSettings())
+	if errJSON != nil {
+		t.Fatal(errJSON)
+	}
+	request := map[string]any{
+		"name": defaultExecutorProvider + ".json",
+		"json": json.RawMessage(authJSON),
+	}
+	raw, errMarshal := json.Marshal(request)
+	if errMarshal != nil {
+		t.Fatal(errMarshal)
+	}
+	var decoded map[string]json.RawMessage
+	if errUnmarshal := json.Unmarshal(raw, &decoded); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	var auth map[string]any
+	if errUnmarshal := json.Unmarshal(decoded["json"], &auth); errUnmarshal != nil {
+		t.Fatalf("auth JSON was encoded as a string: %v", errUnmarshal)
+	}
+	if auth["type"] != defaultExecutorProvider {
+		t.Fatalf("auth type = %#v", auth["type"])
+	}
+}
+
 func TestBuildUpstreamRequestRejectsUnusableProvider(t *testing.T) {
 	req, errParse := parseExecutorRequest([]byte(`{"Model":"m"}`))
 	if errParse != nil {

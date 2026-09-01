@@ -282,7 +282,7 @@ Go 1.26 and GCC:
 
 ```sh
 make test
-make build VERSION=0.2.1
+make build VERSION=0.2.2
 ```
 
 The output is:
