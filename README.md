@@ -105,11 +105,17 @@ plugins:
 ```
 
 The plugin mirrors the provider it matches in `openai-compatibility`: base URL,
-API keys, extra headers, priority, disable-cooling and the model list. Model
-metadata is mapped the same way the host does it, so alias wins over name,
+API keys, extra headers, priority, disable-cooling, prefix and the model list.
+Model metadata is mapped the same way the host does it, so alias wins over name,
 `image: true` becomes the `openai-image` type, and a chat model without explicit
 thinking still advertises `low`, `medium` and `high`. Nothing is invented: if the
 provider declares no models, the plugin publishes none.
+
+With `model_namespace: ""`, the mirrored models keep the original provider
+prefix. For example, an original `prefix: agy` publishes
+`agy/gemini-3.7-flash-high` through the plugin after cutover. The executor
+removes that prefix before forwarding the upstream request to agy2api. Setting
+`model_namespace` overrides the original prefix for a parallel test.
 
 The mirrored provider keeps the original's priority as a base and adds a boost:
 `priority = max(original priority + 100, 10)`. Today CLIProxyAPI ignores
@@ -128,8 +134,8 @@ original provider silently lose their identity. The status endpoint reports
 `models_served` and warns while this is in effect.
 
 To finish the switch, disable the mirrored provider in CPA config and clear
-`model_namespace`. The plugin then publishes the exact model names clients
-already use.
+`model_namespace`. The plugin then publishes the exact prefixed model names
+clients already use.
 
 ### Replacement modes
 
@@ -276,7 +282,7 @@ Go 1.26 and GCC:
 
 ```sh
 make test
-make build VERSION=0.2.0
+make build VERSION=0.2.1
 ```
 
 The output is:

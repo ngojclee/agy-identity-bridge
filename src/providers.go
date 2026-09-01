@@ -152,6 +152,7 @@ type providerDiagnostics struct {
 	MirroredBaseURL          string           `json:"mirrored_base_url,omitempty"`
 	ExecutorEnabled          bool             `json:"executor_enabled"`
 	ExecutorProvider         string           `json:"executor_provider"`
+	ExecutorAuthEnsured      bool             `json:"executor_auth_ensured"`
 	ModelNamespace           string           `json:"model_namespace,omitempty"`
 	MirroredProviderEnabled  bool             `json:"mirrored_provider_enabled"`
 	ReplacementMode          string           `json:"replacement_mode,omitempty"`
@@ -476,10 +477,11 @@ func scanProviderDiagnostics() providerDiagnostics {
 		}
 	} else {
 		out.Warnings = append(out.Warnings,
-		"no configured openai-compatibility provider matched, so executor mode has nothing to mirror")
+			"no configured openai-compatibility provider matched, so executor mode has nothing to mirror")
 	}
 
 	out.Agy2apiSecretConfigured = settings.Agy2apiIdentitySecret != ""
+	out.ExecutorAuthEnsured = executorAuthRecordEnsured()
 	executorRuntimeState.Lock()
 	lastStatus := executorRuntimeState.lastStatus
 	lastAt := executorRuntimeState.lastAt

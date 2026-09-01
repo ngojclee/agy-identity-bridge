@@ -268,13 +268,14 @@ func (s providerSpec) modelInfos(namespace string) []modelInfo {
 		if thinking == nil && !model.Image {
 			thinking = &thinkingSpec{Levels: []string{"low", "medium", "high"}}
 		}
+		visibleID := namespaceModelID(namespace, s.Prefix, modelID)
 		out = append(out, modelInfo{
-			ID:                        namespaceModelID(namespace, modelID),
+			ID:                        visibleID,
 			Object:                    "model",
 			Created:                   created,
 			OwnedBy:                   s.Name,
 			Type:                      modelType,
-			DisplayName:               namespaceModelID(namespace, modelID),
+			DisplayName:               visibleID,
 			SupportedInputModalities:  normalizeModalities(model.InputModalities),
 			SupportedOutputModalities: normalizeModalities(model.OutputModalities),
 			Thinking:                  thinking,
@@ -284,12 +285,22 @@ func (s providerSpec) modelInfos(namespace string) []modelInfo {
 	return out
 }
 
-func namespaceModelID(namespace, modelID string) string {
+// modelNamespace selects the model prefix clients see. An explicit test
+// namespace wins; otherwise the plugin preserves the original provider prefix.
+func modelNamespace(namespace, providerPrefix string) string {
 	namespace = strings.TrimSpace(namespace)
-	if namespace == "" {
+	if namespace != "" {
+		return strings.TrimSuffix(namespace, "/")
+	}
+	return strings.TrimSuffix(strings.TrimSpace(providerPrefix), "/")
+}
+
+func namespaceModelID(namespace, providerPrefix, modelID string) string {
+	prefix := modelNamespace(namespace, providerPrefix)
+	if prefix == "" {
 		return modelID
 	}
-	return strings.TrimSuffix(namespace, "/") + "/" + modelID
+	return prefix + "/" + modelID
 }
 
 func normalizeModalities(raw []string) []string {

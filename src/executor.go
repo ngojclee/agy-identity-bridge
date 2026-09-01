@@ -5,9 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 )
+
+var executorAuthRecordState struct {
+	sync.Mutex
+	fingerprint string
+	ensured     bool
+}
 
 // ensureAuthRecord creates or updates the auth record for the plugin's own
 // provider key so CPA can route requests to this executor. Without it, CPA
@@ -23,14 +30,16 @@ func ensureAuthRecord(spec providerSpec, settings PluginSettings) error {
 	if spec.upstreamBaseURL() == "" || spec.primaryAPIKey() == "" {
 		return fmt.Errorf("mirrored provider missing base_url or api_key, cannot create auth record")
 	}
-	authJSON, errMarshal := json.Marshal(map[string]any{
-		"type":     settings.ExecutorProvider,
-		"base_url": spec.upstreamBaseURL(),
-		"api_key":  spec.primaryAPIKey(),
-		"label":    "ln.Antigravity executor",
-	})
+	fingerprint := settings.ExecutorProvider + "\x00" + spec.upstreamBaseURL() + "\x00" +
+		spec.primaryAPIKey() + "\x00" + modelNamespace(settings.ModelNamespace, spec.Prefix)
+	executorAuthRecordState.Lock()
+	defer executorAuthRecordState.Unlock()
+	if executorAuthRecordState.ensured && executorAuthRecordState.fingerprint == fingerprint {
+		return nil
+	}
+	authJSON, errMarshal := executorAuthJSON(spec, settings)
 	if errMarshal != nil {
-		return fmt.Errorf("marshal auth record: %w", errMarshal)
+		return errMarshal
 	}
 	saveRequest, errMarshal2 := json.Marshal(map[string]any{
 		"name": settings.ExecutorProvider + ".json",
@@ -43,7 +52,36 @@ func ensureAuthRecord(spec providerSpec, settings PluginSettings) error {
 	if errCall != nil {
 		return fmt.Errorf("host.auth.save failed: %w", errCall)
 	}
+	executorAuthRecordState.fingerprint = fingerprint
+	executorAuthRecordState.ensured = true
 	return nil
+}
+
+func resetExecutorAuthRecordState() {
+	executorAuthRecordState.Lock()
+	executorAuthRecordState.fingerprint = ""
+	executorAuthRecordState.ensured = false
+	executorAuthRecordState.Unlock()
+}
+
+func executorAuthRecordEnsured() bool {
+	executorAuthRecordState.Lock()
+	defer executorAuthRecordState.Unlock()
+	return executorAuthRecordState.ensured
+}
+
+func executorAuthJSON(spec providerSpec, settings PluginSettings) ([]byte, error) {
+	authJSON, errMarshal := json.Marshal(map[string]any{
+		"type":     settings.ExecutorProvider,
+		"base_url": spec.upstreamBaseURL(),
+		"api_key":  spec.primaryAPIKey(),
+		"label":    "ln.Antigravity executor",
+		"prefix":   modelNamespace(settings.ModelNamespace, spec.Prefix),
+	})
+	if errMarshal != nil {
+		return nil, fmt.Errorf("marshal auth record: %w", errMarshal)
+	}
+	return authJSON, nil
 }
 
 // executorRequest mirrors pluginapi.ExecutorRequest plus the host callback id
@@ -229,7 +267,7 @@ func buildUpstreamRequest(req executorRequest, spec providerSpec, identity clien
 		return hostHTTPRequest{}, fmt.Errorf("mirrored provider has no API key configured")
 	}
 	endpoint := "/chat/completions"
-	payload := req.Payload
+	payload := rewritePayloadModel(req.Payload, settingsModelPrefix(currentPluginSettings(), spec))
 	// Image requests keep their own endpoint, which agy2api exposes the same
 	// way the provider config did.
 	if strings.Contains(req.Format, "image") || req.Alt == "openai-image" {
@@ -252,6 +290,54 @@ func buildUpstreamRequest(req executorRequest, spec providerSpec, identity clien
 	}, nil
 }
 
+func settingsModelPrefix(settings PluginSettings, spec providerSpec) string {
+	return modelNamespace(settings.ModelNamespace, spec.Prefix)
+}
+
+func stripModelPrefix(modelID, prefix string) string {
+	modelID = strings.TrimSpace(modelID)
+	prefix = strings.TrimSuffix(strings.TrimSpace(prefix), "/")
+	if prefix == "" {
+		return modelID
+	}
+	if strings.HasPrefix(strings.ToLower(modelID), strings.ToLower(prefix)+"/") {
+		return modelID[len(prefix)+1:]
+	}
+	return modelID
+}
+
+func normalizeExecutorModel(req *executorRequest, spec providerSpec) {
+	if req == nil {
+		return
+	}
+	req.Model = stripModelPrefix(req.Model, settingsModelPrefix(currentPluginSettings(), spec))
+	req.Payload = rewritePayloadModel(req.Payload, settingsModelPrefix(currentPluginSettings(), spec))
+}
+
+func rewritePayloadModel(payload []byte, prefix string) []byte {
+	if len(payload) == 0 || strings.TrimSpace(prefix) == "" {
+		return payload
+	}
+	var body map[string]any
+	if errUnmarshal := json.Unmarshal(payload, &body); errUnmarshal != nil {
+		return payload
+	}
+	model, ok := body["model"].(string)
+	if !ok {
+		return payload
+	}
+	rewritten := stripModelPrefix(model, prefix)
+	if rewritten == model {
+		return payload
+	}
+	body["model"] = rewritten
+	out, errMarshal := json.Marshal(body)
+	if errMarshal != nil {
+		return payload
+	}
+	return out
+}
+
 func handleExecutorIdentifier() []byte {
 	settings := currentPluginSettings()
 	return okEnvelope(map[string]string{"identifier": settings.ExecutorProvider})
@@ -266,6 +352,7 @@ func handleExecutorExecute(raw []byte) ([]byte, error) {
 	if !found {
 		return errorEnvelope("provider_unresolved", "no mirrored provider is configured"), nil
 	}
+	normalizeExecutorModel(&req, spec)
 	identity := identityFromExecutorRequest(req)
 	upstream, errBuild := buildUpstreamRequest(req, spec, identity)
 	if errBuild != nil {
@@ -300,6 +387,7 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 	if !found {
 		return errorEnvelope("provider_unresolved", "no mirrored provider is configured"), nil
 	}
+	normalizeExecutorModel(&req, spec)
 	identity := identityFromExecutorRequest(req)
 	upstream, errBuild := buildUpstreamRequest(req, spec, identity)
 	if errBuild != nil {
@@ -353,6 +441,7 @@ func handleExecutorCountTokens(raw []byte) ([]byte, error) {
 	if !found {
 		return errorEnvelope("provider_unresolved", "no mirrored provider is configured"), nil
 	}
+	normalizeExecutorModel(&req, spec)
 	identity := identityFromExecutorRequest(req)
 	upstream, errBuild := buildUpstreamRequest(req, spec, identity)
 	if errBuild != nil {

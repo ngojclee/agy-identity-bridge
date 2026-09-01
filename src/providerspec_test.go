@@ -119,18 +119,18 @@ func TestModelInfosMatchCPAMapping(t *testing.T) {
 		t.Fatalf("model count = %d, want 3: %+v", len(infos), infos)
 	}
 
-	chat := byID["gemini-pro"]
+	chat := byID["agy/gemini-pro"]
 	if chat.Type != "openai-compatibility" {
 		t.Fatalf("chat type = %q", chat.Type)
 	}
 	if chat.Thinking == nil || len(chat.Thinking.Levels) != 3 {
 		t.Fatalf("chat thinking default = %+v", chat.Thinking)
 	}
-	if chat.OwnedBy != "Antigravity" || chat.Object != "model" || chat.DisplayName != "gemini-pro" {
+	if chat.OwnedBy != "Antigravity" || chat.Object != "model" || chat.DisplayName != "agy/gemini-pro" {
 		t.Fatalf("chat metadata = %+v", chat)
 	}
 
-	image := byID["gemini-image"]
+	image := byID["agy/gemini-image"]
 	if image.Type != "openai-image" {
 		t.Fatalf("image type = %q", image.Type)
 	}
@@ -143,7 +143,7 @@ func TestModelInfosMatchCPAMapping(t *testing.T) {
 		t.Fatalf("input modalities = %+v", image.SupportedInputModalities)
 	}
 
-	if _, ok := byID["no-alias-model"]; !ok {
+	if _, ok := byID["agy/no-alias-model"]; !ok {
 		t.Fatalf("model without alias should publish by name: %+v", infos)
 	}
 }
@@ -231,8 +231,14 @@ func TestExecutorWithholdsModelsWhileMirroredProviderIsLive(t *testing.T) {
 	settings.ModelNamespace = ""
 	withSettings(t, settings)
 
-	if _, found := resolveProviderSpec(); !found {
+	spec, found := resolveProviderSpec()
+	if !found {
 		t.Fatal("fixture provider was not mirrored")
+	}
+	for _, model := range spec.modelInfos("") {
+		if !strings.HasPrefix(model.ID, "agy/") {
+			t.Fatalf("replacement model does not preserve original prefix: %+v", model)
+		}
 	}
 	caps := registrationCapabilities()
 	if caps.ModelRegistrar || caps.ModelProvider {
@@ -299,6 +305,40 @@ func TestExecutorProviderKeyIsNormalised(t *testing.T) {
 	settings := normalizeSettings(PluginSettings{})
 	if settings.ExecutorProvider != defaultExecutorProvider {
 		t.Fatalf("default provider key = %q", settings.ExecutorProvider)
+	}
+}
+
+func TestExecutorAuthRecordUsesVisibleModelPrefix(t *testing.T) {
+	loadMirror(t)
+	root, _ := parseYAMLMap([]byte(mirrorConfigYAML))
+	spec, found := extractProviderSpec(root, currentPluginSettings())
+	if !found {
+		t.Fatal("expected mirrored provider")
+	}
+
+	raw, errJSON := executorAuthJSON(spec, currentPluginSettings())
+	if errJSON != nil {
+		t.Fatal(errJSON)
+	}
+	var auth map[string]any
+	if errUnmarshal := json.Unmarshal(raw, &auth); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	if auth["prefix"] != "agy" {
+		t.Fatalf("auth prefix = %#v, want agy", auth["prefix"])
+	}
+
+	settings := currentPluginSettings()
+	settings.ModelNamespace = "spike."
+	raw, errJSON = executorAuthJSON(spec, settings)
+	if errJSON != nil {
+		t.Fatal(errJSON)
+	}
+	if errUnmarshal := json.Unmarshal(raw, &auth); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	if auth["prefix"] != "spike." {
+		t.Fatalf("namespaced auth prefix = %#v, want spike.", auth["prefix"])
 	}
 }
 

@@ -41,6 +41,14 @@ func currentModelResponse() modelRegistrationResponse {
 	if !found || !canServeModels(settings, spec) {
 		return modelRegistrationResponse{Provider: settings.ExecutorProvider, Models: []modelInfo{}}
 	}
+	// CPA asks for models after registering this plugin. Retrying here makes
+	// the plugin-owned auth record self-heal when a lifecycle-time callback
+	// was too early for the host auth manager.
+	if errAuth := ensureAuthRecord(spec, settings); errAuth != nil {
+		hostLog("warn", "auth record creation failed during model registration", map[string]any{
+			"error": errAuth.Error(),
+		})
+	}
 	return modelRegistrationResponse{
 		Provider: settings.ExecutorProvider,
 		Models:   spec.modelInfos(settings.ModelNamespace),

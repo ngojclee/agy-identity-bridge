@@ -155,6 +155,7 @@ func configurePlugin(raw []byte) error {
 	}
 	snapshot := loadPluginConfiguration(request.ConfigYAML)
 	applyPluginConfiguration(snapshot)
+	resetExecutorAuthRecordState()
 
 	// The mirrored provider record can change when CPA config changes, so the
 	// cache is dropped and rebuilt from the freshly loaded config.
@@ -267,16 +268,16 @@ func pluginRegistration() registration {
 					EnumValues:  []string{"env", "config", "provider_api_key", "none"},
 					Description: "Signature source: AGY_PLUGIN_SECRET from the CPA environment, the selected provider API key, or none. Default env.",
 				},
-			{
-				Name:        "hmac_secret",
-				Type:        pluginapi.ConfigFieldTypeString,
-				Description: "Optional HMAC secret when hmac_secret_source is config. Prefer AGY_PLUGIN_SECRET so secrets stay out of config exports.",
-			},
-			{
-				Name:        "agy2api_identity_secret",
-				Type:        pluginapi.ConfigFieldTypeString,
-				Description: "Dedicated HMAC secret matching agy2api AGY_IDENTITY_BRIDGE_SECRET. Takes priority over hmac_secret and AGY_PLUGIN_SECRET. Write-only: never returned by GET settings.",
-			},
+				{
+					Name:        "hmac_secret",
+					Type:        pluginapi.ConfigFieldTypeString,
+					Description: "Optional HMAC secret when hmac_secret_source is config. Prefer AGY_PLUGIN_SECRET so secrets stay out of config exports.",
+				},
+				{
+					Name:        "agy2api_identity_secret",
+					Type:        pluginapi.ConfigFieldTypeString,
+					Description: "Dedicated HMAC secret matching agy2api AGY_IDENTITY_BRIDGE_SECRET. Takes priority over hmac_secret and AGY_PLUGIN_SECRET. Write-only: never returned by GET settings.",
+				},
 				{
 					Name:        "executor_enabled",
 					Type:        pluginapi.ConfigFieldTypeBoolean,

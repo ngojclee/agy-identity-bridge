@@ -104,6 +104,64 @@ func TestBuildUpstreamRequestAttachesIdentityHeaders(t *testing.T) {
 	}
 }
 
+func TestExecutorStripsPublishedPrefixBeforeCallingAgy2api(t *testing.T) {
+	loadMirror(t)
+	root, errParse := parseYAMLMap([]byte(mirrorConfigYAML))
+	if errParse != nil {
+		t.Fatal(errParse)
+	}
+	spec, found := extractProviderSpec(root, currentPluginSettings())
+	if !found {
+		t.Fatal("no mirrored provider")
+	}
+	req, errParse := parseExecutorRequest([]byte(`{"Model":"agy/gemini-3.1-pro","Payload":"eyJtb2RlbCI6ImFneS9nZW1pbmktMy4xLXBybyIsIm1lc3NhZ2VzIjpbXX0="}`))
+	if errParse != nil {
+		t.Fatal(errParse)
+	}
+	normalizeExecutorModel(&req, spec)
+	if req.Model != "gemini-3.1-pro" {
+		t.Fatalf("executor model = %q", req.Model)
+	}
+	upstream, errBuild := buildUpstreamRequest(req, spec, identityFromExecutorRequest(req))
+	if errBuild != nil {
+		t.Fatal(errBuild)
+	}
+	var body map[string]any
+	if errUnmarshal := json.Unmarshal(unb64(upstream.Body), &body); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	if body["model"] != "gemini-3.1-pro" {
+		t.Fatalf("upstream payload model = %#v", body["model"])
+	}
+}
+
+func TestModelNamespaceOverridesOriginalPrefixForExecutor(t *testing.T) {
+	loadMirror(t)
+	root, _ := parseYAMLMap([]byte(mirrorConfigYAML))
+	spec, found := extractProviderSpec(root, currentPluginSettings())
+	if !found {
+		t.Fatal("no mirrored provider")
+	}
+	settings := currentPluginSettings()
+	settings.ModelNamespace = "spike."
+	withSettings(t, settings)
+	req := executorRequest{
+		Model:   "spike./gemini-3.1-pro",
+		Payload: []byte(`{"model":"spike./gemini-3.1-pro"}`),
+	}
+	normalizeExecutorModel(&req, spec)
+	if req.Model != "gemini-3.1-pro" {
+		t.Fatalf("namespaced executor model = %q", req.Model)
+	}
+	var body map[string]any
+	if errUnmarshal := json.Unmarshal(req.Payload, &body); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	if body["model"] != "gemini-3.1-pro" {
+		t.Fatalf("namespaced payload model = %#v", body["model"])
+	}
+}
+
 func TestBuildUpstreamRequestRejectsUnusableProvider(t *testing.T) {
 	req, errParse := parseExecutorRequest([]byte(`{"Model":"m"}`))
 	if errParse != nil {
