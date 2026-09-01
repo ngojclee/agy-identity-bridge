@@ -280,7 +280,7 @@ func pluginRegistration() registration {
 				{
 					Name:        "executor_provider",
 					Type:        pluginapi.ConfigFieldTypeString,
-					Description: "Plugin-owned provider key used in executor mode. It must not be a key CLIProxyAPI already serves natively. Default agy-bridge.",
+					Description: "Plugin-owned provider key used in executor mode. It must not be a key CLIProxyAPI already serves natively. Default ln.Antigravity.",
 				},
 				{
 					Name:        "model_namespace",

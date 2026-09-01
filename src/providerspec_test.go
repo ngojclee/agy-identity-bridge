@@ -293,7 +293,7 @@ func withSettings(t *testing.T, settings PluginSettings) {
 }
 
 func TestExecutorProviderKeyIsNormalised(t *testing.T) {
-	if got := normalizeProviderKey(" AGY Bridge/Prod "); got != "agy-bridge-prod" {
+	if got := normalizeProviderKey(" AGY Bridge/Prod "); got != "AGY-Bridge-Prod" {
 		t.Fatalf("normalizeProviderKey = %q", got)
 	}
 	settings := normalizeSettings(PluginSettings{})

@@ -78,7 +78,7 @@ func defaultPluginSettings() PluginSettings {
 // defaultExecutorProvider is the plugin-owned provider key. It must not be a
 // key CLIProxyAPI already serves with a native executor, because the host skips
 // plugin executors in that case.
-const defaultExecutorProvider = "agy-bridge"
+const defaultExecutorProvider = "ln.Antigravity"
 
 func normalizeSettings(s PluginSettings) PluginSettings {
 	s.MatchMode = strings.ToLower(strings.TrimSpace(s.MatchMode))
@@ -144,14 +144,14 @@ func normalizeSettings(s PluginSettings) PluginSettings {
 // normalizeProviderKey keeps a provider key usable in model routing: no
 // spaces, no path separators, lowercase.
 func normalizeProviderKey(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return ""
 	}
 	var builder strings.Builder
 	for _, r := range value {
 		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_', r == '.':
 			builder.WriteRune(r)
 		case r == ' ' || r == '/' || r == '\\':
 			builder.WriteRune('-')

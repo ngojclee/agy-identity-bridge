@@ -100,7 +100,7 @@ plugins:
   configs:
     agy-identity-bridge:
       executor_enabled: true
-      executor_provider: agy-bridge
+      executor_provider: ln.Antigravity
       model_namespace: "spike."
 ```
 

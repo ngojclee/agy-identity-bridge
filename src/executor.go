@@ -27,7 +27,7 @@ func ensureAuthRecord(spec providerSpec, settings PluginSettings) error {
 		"type":     settings.ExecutorProvider,
 		"base_url": spec.upstreamBaseURL(),
 		"api_key":  spec.primaryAPIKey(),
-		"label":    "agy-identity-bridge executor",
+		"label":    "ln.Antigravity executor",
 	})
 	if errMarshal != nil {
 		return fmt.Errorf("marshal auth record: %w", errMarshal)
