@@ -48,6 +48,51 @@ func TestDashboardShowsOperationalState(t *testing.T) {
 	}
 }
 
+func TestProviderDetailPageShowsLiveModelsAndConfig(t *testing.T) {
+	diagnostics := providerDiagnostics{
+		Version:                 "test",
+		Enabled:                 true,
+		ExecutorEnabled:         true,
+		ExecutorProvider:        "ln.Antigravity",
+		ExecutorAuthEnsured:     true,
+		ReplacementMode:         "active",
+		MirroredProvider:        "Antigravity",
+		MirroredPriority:        120,
+		MirroredDisableCooling:  true,
+		MirroredBaseURL:         "http://10.21.4.101:8123/v1",
+		MirroredModelCount:      2,
+		MirroredModelIDs:        []string{"gemini-3.7-flash-high", "gemini-3.7-flash-low"},
+		PublishedModelIDs:       []string{"agy/gemini-3.7-flash-high", "agy/gemini-3.7-flash-low"},
+		ProviderOriginalEnabled: false,
+		Agy2apiSecretConfigured: true,
+		ModelsServed:            true,
+		LastExecutorStatus:      200,
+		InterceptCount:          7,
+		RuntimeAuthCount:        12,
+		MatchedRecordCount:      1,
+		ActivePrefixes:          []string{"agy"},
+		RecentEvents: []dashboardEvent{
+			{At: "2026-09-01T00:00:00Z", Level: "success", Message: "Plugin executor auth record is ready"},
+		},
+	}
+	page := providerDetailPage(diagnostics)
+	for _, expected := range []string{
+		"Provider snapshot",
+		"Back to summary",
+		"Upstream base URL",
+		"http://10.21.4.101:8123/v1",
+		"Live model IDs",
+		"Mirrored model catalog",
+		"agy/gemini-3.7-flash-high",
+		"gemini-3.7-flash-low",
+		"ln.Antigravity",
+	} {
+		if !strings.Contains(page, expected) {
+			t.Fatalf("provider detail page missing %q", expected)
+		}
+	}
+}
+
 func TestDashboardEventBufferStaysBoundedAndNewestFirst(t *testing.T) {
 	for i := 0; i < maxDashboardEvents+2; i++ {
 		recordDashboardEvent("info", "event")

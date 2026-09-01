@@ -147,9 +147,13 @@ type providerDiagnostics struct {
 	ScannedProviders         []providerStatus `json:"scanned_providers,omitempty"`
 	Providers                []providerStatus `json:"providers"`
 	MirroredProvider         string           `json:"mirrored_provider,omitempty"`
+	MirroredPriority         int              `json:"mirrored_priority,omitempty"`
+	MirroredDisableCooling   bool             `json:"mirrored_disable_cooling"`
 	MirroredModelCount       int              `json:"mirrored_model_count"`
 	MirroredHasAPIKey        bool             `json:"mirrored_has_api_key"`
 	MirroredBaseURL          string           `json:"mirrored_base_url,omitempty"`
+	MirroredModelIDs         []string         `json:"mirrored_model_ids,omitempty"`
+	PublishedModelIDs        []string         `json:"published_model_ids,omitempty"`
 	ExecutorEnabled          bool             `json:"executor_enabled"`
 	ExecutorProvider         string           `json:"executor_provider"`
 	ExecutorAuthEnsured      bool             `json:"executor_auth_ensured"`
@@ -501,13 +505,21 @@ func scanProviderDiagnostics() providerDiagnostics {
 	out.ActivePrefixes = uniqueStrings(prefixes)
 
 	if spec, mirrored := resolveProviderSpec(); mirrored {
+		modelInfos := spec.modelInfos(settings.ModelNamespace)
+		modelsServed := canServeModels(settings, spec)
 		out.MirroredProvider = spec.Name
 		out.MirroredBaseURL = redactURL(spec.BaseURL)
 		out.MirroredHasAPIKey = spec.primaryAPIKey() != ""
+		out.MirroredPriority = spec.Priority
+		out.MirroredDisableCooling = spec.DisableCooling
 		out.MirroredProviderEnabled = spec.Enabled
 		out.ProviderOriginalEnabled = spec.Enabled
-		out.MirroredModelCount = len(spec.modelInfos(settings.ModelNamespace))
-		out.ModelsServed = canServeModels(settings, spec)
+		out.MirroredModelCount = len(modelInfos)
+		out.MirroredModelIDs = modelIDsFromInfos(modelInfos)
+		if modelsServed {
+			out.PublishedModelIDs = publishedModelIDs(spec, settings)
+		}
+		out.ModelsServed = modelsServed
 		switch {
 		case strings.TrimSpace(settings.ModelNamespace) != "":
 			out.ReplacementMode = "namespace"
@@ -781,6 +793,39 @@ func publicProviderDiagnostics(in providerDiagnostics) providerDiagnostics {
 		out.Providers = append(out.Providers, item)
 	}
 	return out
+}
+
+func modelIDsFromInfos(values []modelInfo) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, item := range values {
+		if id := strings.TrimSpace(item.ID); id != "" {
+			out = append(out, id)
+		}
+	}
+	return uniqueStrings(out)
+}
+
+func publishedModelIDs(spec providerSpec, settings PluginSettings) []string {
+	infos := spec.modelInfos(settings.ModelNamespace)
+	if len(infos) == 0 || !canServeModels(settings, spec) {
+		return nil
+	}
+	prefix := modelNamespace(settings.ModelNamespace, spec.Prefix)
+	if prefix == "" {
+		return nil
+	}
+	out := make([]string, 0, len(infos))
+	for _, item := range infos {
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			continue
+		}
+		out = append(out, prefix+"/"+id)
+	}
+	return uniqueStrings(out)
 }
 
 func maxInt(left, right int) int {
