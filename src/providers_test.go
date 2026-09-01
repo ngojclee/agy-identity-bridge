@@ -38,6 +38,7 @@ func TestDashboardShowsOperationalState(t *testing.T) {
 		"agy2api HTTP 200",
 		"Runtime log",
 		"Plugin executor auth record is ready",
+		"background:#22221f;color:#eceae5",
 	} {
 		if !strings.Contains(page, expected) {
 			t.Fatalf("dashboard missing %q", expected)
