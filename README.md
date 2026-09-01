@@ -122,6 +122,11 @@ The mirrored provider keeps the original's priority as a base and adds a boost:
 priority when two providers publish the same model ID, but if a future version
 starts honoring it, the plugin provider wins instead of splitting traffic.
 
+The plugin returns model names without a provider prefix during model
+registration. CPA applies the prefix from the plugin-owned auth record, so the
+visible client model remains `agy/<model>` (or the configured namespace)
+without becoming `agy/agy/<model>`.
+
 `executor_enabled` defaults to false, and installing a new plugin version does
 not change routing on its own.
 
@@ -134,8 +139,8 @@ original provider silently lose their identity. The status endpoint reports
 `models_served` and warns while this is in effect.
 
 To finish the switch, disable the mirrored provider in CPA config and clear
-`model_namespace`. The plugin then publishes the exact prefixed model names
-clients already use.
+`model_namespace`. The plugin then publishes the same visible model names
+clients already use after CPA applies the preserved provider prefix.
 
 ### Replacement modes
 

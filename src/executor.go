@@ -51,6 +51,7 @@ func ensureAuthRecord(spec providerSpec, settings PluginSettings) error {
 	}
 	executorAuthRecordState.fingerprint = fingerprint
 	executorAuthRecordState.ensured = true
+	recordDashboardEvent("success", "Plugin executor auth record is ready")
 	return nil
 }
 

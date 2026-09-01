@@ -6,6 +6,123 @@ import (
 	"testing"
 )
 
+func TestDashboardShowsOperationalState(t *testing.T) {
+	diagnostics := providerDiagnostics{
+		Version:                 "test",
+		Enabled:                 true,
+		ExecutorEnabled:         true,
+		ExecutorProvider:        "ln.Antigravity",
+		ExecutorAuthEnsured:     true,
+		ReplacementMode:         "active",
+		MirroredProvider:        "Antigravity",
+		MirroredModelCount:      15,
+		ProviderOriginalEnabled: false,
+		Agy2apiSecretConfigured: true,
+		ModelsServed:            true,
+		LastExecutorStatus:      200,
+		InterceptCount:          7,
+		RuntimeAuthCount:        12,
+		MatchedRecordCount:      1,
+		ActivePrefixes:          []string{"agy"},
+		RecentEvents: []dashboardEvent{
+			{At: "2026-09-01T00:00:00Z", Level: "success", Message: "Plugin executor auth record is ready"},
+			{At: "2026-09-01T00:00:01Z", Level: "info", Message: "Client request intercepted for the mirrored provider"},
+		},
+	}
+	page := publicStatusPage(diagnostics)
+	for _, expected := range []string{
+		"Plugin replacement live",
+		"Live",
+		"ln.Antigravity auth ready",
+		"Plugin models published",
+		"agy2api HTTP 200",
+		"Runtime log",
+		"Plugin executor auth record is ready",
+	} {
+		if !strings.Contains(page, expected) {
+			t.Fatalf("dashboard missing %q", expected)
+		}
+	}
+}
+
+func TestDashboardEventBufferStaysBoundedAndNewestFirst(t *testing.T) {
+	for i := 0; i < maxDashboardEvents+2; i++ {
+		recordDashboardEvent("info", "event")
+	}
+	events := recentDashboardEvents()
+	if len(events) != maxDashboardEvents {
+		t.Fatalf("event count = %d, want %d", len(events), maxDashboardEvents)
+	}
+}
+
+func TestDashboardRouteStateReflectsReadiness(t *testing.T) {
+	tests := []struct {
+		name  string
+		input providerDiagnostics
+		label string
+		tone  string
+	}{
+		{
+			name:  "disabled plugin",
+			input: providerDiagnostics{Enabled: false, ExecutorEnabled: true},
+			label: "Plugin disabled",
+			tone:  "muted",
+		},
+		{
+			name:  "executor auth missing",
+			input: providerDiagnostics{Enabled: true, ExecutorEnabled: true},
+			label: "Executor not ready",
+			tone:  "error",
+		},
+		{
+			name: "upstream error",
+			input: providerDiagnostics{
+				Enabled:             true,
+				ExecutorEnabled:     true,
+				ExecutorAuthEnsured: true,
+				ModelsServed:        true,
+				LastExecutorStatus:  401,
+			},
+			label: "Executor degraded",
+			tone:  "error",
+		},
+		{
+			name: "withheld models",
+			input: providerDiagnostics{
+				Enabled:             true,
+				ExecutorEnabled:     true,
+				ExecutorAuthEnsured: true,
+				ModelsServed:        false,
+			},
+			label: "Models withheld",
+			tone:  "warning",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			state, tone := dashboardRouteState(test.input)
+			if state.label != test.label || tone != test.tone {
+				t.Fatalf("state = %#v, tone = %q, want label %q/tone %q", state, tone, test.label, test.tone)
+			}
+		})
+	}
+}
+
+func TestDashboardPublishedModelCountOnlyCountsServedModels(t *testing.T) {
+	if count := dashboardPublishedModelCount(providerDiagnostics{
+		MirroredModelCount: 9,
+		ModelsServed:       false,
+	}); count != 0 {
+		t.Fatalf("withheld published model count = %d, want 0", count)
+	}
+	if count := dashboardPublishedModelCount(providerDiagnostics{
+		MirroredModelCount: 9,
+		ModelsServed:       true,
+	}); count != 9 {
+		t.Fatalf("served published model count = %d, want 9", count)
+	}
+}
+
 func TestProviderMatchingDefaultsAndExplicitRules(t *testing.T) {
 	defaults := defaultPluginSettings()
 	if matched, by := defaults.shouldInterceptCandidate(providerCandidate{
@@ -399,7 +516,7 @@ func TestPublicStatusPageShowsSummaryWithoutPrivateSelectors(t *testing.T) {
 		ConfigPath: "/private/config.yaml",
 	}
 	page := publicStatusPage(diagnostics)
-	if !strings.Contains(page, "Scanned records") || !strings.Contains(page, "Antigravity") {
+	if !strings.Contains(page, "Matched records") || !strings.Contains(page, "Antigravity") {
 		t.Fatalf("public status page is missing summary/provider data: %s", page)
 	}
 	for _, privateValue := range []string{

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
@@ -180,6 +181,7 @@ func configurePlugin(raw []byte) error {
 			hostLog("warn", "auth record creation failed", map[string]any{
 				"error": errAuth.Error(),
 			})
+			recordDashboardEvent("error", "Plugin executor auth record could not be created")
 		} else {
 			hostLog("info", "auth record ensured", map[string]any{
 				"provider": settings.ExecutorProvider,
@@ -188,6 +190,10 @@ func configurePlugin(raw []byte) error {
 	}
 
 	diagnostics := scanProviderDiagnostics()
+	recordDashboardEvent("info", fmt.Sprintf(
+		"Configuration applied: %d matched provider record(s), replacement mode %s",
+		diagnostics.MatchedRecordCount, diagnostics.ReplacementMode,
+	))
 	hostLog("info", "provider discovery completed", map[string]any{
 		"config_path_found":        diagnostics.ConfigPathFound,
 		"plugin_config_found":      diagnostics.PluginConfigFound,

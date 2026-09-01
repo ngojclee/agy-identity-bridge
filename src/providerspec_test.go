@@ -119,18 +119,18 @@ func TestModelInfosMatchCPAMapping(t *testing.T) {
 		t.Fatalf("model count = %d, want 3: %+v", len(infos), infos)
 	}
 
-	chat := byID["agy/gemini-pro"]
+	chat := byID["gemini-pro"]
 	if chat.Type != "openai-compatibility" {
 		t.Fatalf("chat type = %q", chat.Type)
 	}
 	if chat.Thinking == nil || len(chat.Thinking.Levels) != 3 {
 		t.Fatalf("chat thinking default = %+v", chat.Thinking)
 	}
-	if chat.OwnedBy != "Antigravity" || chat.Object != "model" || chat.DisplayName != "agy/gemini-pro" {
+	if chat.OwnedBy != "Antigravity" || chat.Object != "model" || chat.DisplayName != "gemini-pro" {
 		t.Fatalf("chat metadata = %+v", chat)
 	}
 
-	image := byID["agy/gemini-image"]
+	image := byID["gemini-image"]
 	if image.Type != "openai-image" {
 		t.Fatalf("image type = %q", image.Type)
 	}
@@ -143,22 +143,22 @@ func TestModelInfosMatchCPAMapping(t *testing.T) {
 		t.Fatalf("input modalities = %+v", image.SupportedInputModalities)
 	}
 
-	if _, ok := byID["agy/no-alias-model"]; !ok {
+	if _, ok := byID["no-alias-model"]; !ok {
 		t.Fatalf("model without alias should publish by name: %+v", infos)
 	}
 }
 
-func TestModelNamespaceKeepsCollisionControl(t *testing.T) {
+func TestModelRegistrationLeavesPrefixToCPA(t *testing.T) {
 	loadMirror(t)
 	root, _ := parseYAMLMap([]byte(mirrorConfigYAML))
 	spec, _ := extractProviderSpec(root, currentPluginSettings())
-	namespaced := spec.modelInfos("spike.")
-	if len(namespaced) == 0 {
+	infos := spec.modelInfos("")
+	if len(infos) == 0 {
 		t.Fatal("no models")
 	}
-	for _, info := range namespaced {
-		if len(info.ID) < 6 || info.ID[:6] != "spike." {
-			t.Fatalf("namespace not applied: %+v", info)
+	for _, info := range infos {
+		if strings.Contains(info.ID, "/") {
+			t.Fatalf("model registration must leave prefix to CPA, got %+v", info)
 		}
 		if info.DisplayName != info.ID {
 			t.Fatalf("display name drifted from id: %+v", info)
@@ -236,8 +236,8 @@ func TestExecutorWithholdsModelsWhileMirroredProviderIsLive(t *testing.T) {
 		t.Fatal("fixture provider was not mirrored")
 	}
 	for _, model := range spec.modelInfos("") {
-		if !strings.HasPrefix(model.ID, "agy/") {
-			t.Fatalf("replacement model does not preserve original prefix: %+v", model)
+		if strings.HasPrefix(model.ID, "agy/") {
+			t.Fatalf("model registration must not duplicate original prefix: %+v", model)
 		}
 	}
 	caps := registrationCapabilities()
@@ -279,8 +279,8 @@ func TestExecutorWithholdsModelsWhileMirroredProviderIsLive(t *testing.T) {
 		t.Fatalf("namespaced model count = %d, want 3", len(served.Models))
 	}
 	for _, model := range served.Models {
-		if !strings.HasPrefix(model.ID, "spike./") && !strings.HasPrefix(model.ID, "spike.") {
-			t.Fatalf("namespace missing from %q", model.ID)
+		if strings.Contains(model.ID, "/") {
+			t.Fatalf("model registration must leave namespace prefix to CPA, got %q", model.ID)
 		}
 	}
 }
@@ -590,7 +590,7 @@ func TestDiagnosticsReportsMirroredProvider(t *testing.T) {
 		t.Fatalf("public diagnostics leaked base url: %q", public.MirroredBaseURL)
 	}
 	page := publicStatusPage(diagnostics)
-	for _, expected := range []string{"Mirrored provider", "Antigravity", "3 models", "off, routing unchanged"} {
+	for _, expected := range []string{"Mirrored provider", "Antigravity", "3", "Routing unchanged", "Executor off"} {
 		if !strings.Contains(page, expected) {
 			t.Fatalf("public page missing %q: %s", expected, page)
 		}

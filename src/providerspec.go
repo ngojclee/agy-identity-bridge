@@ -245,9 +245,13 @@ func canServeModels(settings PluginSettings, spec providerSpec) bool {
 	return strings.TrimSpace(settings.ModelNamespace) != "" || !spec.Enabled
 }
 
-// modelInfos reproduces CLIProxyAPI's own buildOpenAICompatibilityConfigModels
-// mapping: alias wins over name, image models switch type, and a chat model
-// without explicit thinking still advertises the three standard levels.
+// modelInfos reproduces CLIProxyAPI's own model metadata mapping: alias wins
+// over name, image models switch type, and a chat model without explicit
+// thinking still advertises the three standard levels.
+//
+// The returned IDs intentionally do not include the provider prefix. CPA adds
+// the auth record's prefix while registering the client. Including it here
+// would make the live model ID become "agy/agy/<model>".
 func (s providerSpec) modelInfos(namespace string) []modelInfo {
 	created := time.Now().Unix()
 	out := make([]modelInfo, 0, len(s.Models))
@@ -268,14 +272,13 @@ func (s providerSpec) modelInfos(namespace string) []modelInfo {
 		if thinking == nil && !model.Image {
 			thinking = &thinkingSpec{Levels: []string{"low", "medium", "high"}}
 		}
-		visibleID := namespaceModelID(namespace, s.Prefix, modelID)
 		out = append(out, modelInfo{
-			ID:                        visibleID,
+			ID:                        modelID,
 			Object:                    "model",
 			Created:                   created,
 			OwnedBy:                   s.Name,
 			Type:                      modelType,
-			DisplayName:               visibleID,
+			DisplayName:               modelID,
 			SupportedInputModalities:  normalizeModalities(model.InputModalities),
 			SupportedOutputModalities: normalizeModalities(model.OutputModalities),
 			Thinking:                  thinking,
@@ -285,22 +288,15 @@ func (s providerSpec) modelInfos(namespace string) []modelInfo {
 	return out
 }
 
-// modelNamespace selects the model prefix clients see. An explicit test
-// namespace wins; otherwise the plugin preserves the original provider prefix.
+// modelNamespace selects the prefix written to the plugin-owned auth record.
+// An explicit test namespace wins; otherwise the original provider prefix is
+// preserved.
 func modelNamespace(namespace, providerPrefix string) string {
 	namespace = strings.TrimSpace(namespace)
 	if namespace != "" {
 		return strings.TrimSuffix(namespace, "/")
 	}
 	return strings.TrimSuffix(strings.TrimSpace(providerPrefix), "/")
-}
-
-func namespaceModelID(namespace, providerPrefix, modelID string) string {
-	prefix := modelNamespace(namespace, providerPrefix)
-	if prefix == "" {
-		return modelID
-	}
-	return prefix + "/" + modelID
 }
 
 func normalizeModalities(raw []string) []string {

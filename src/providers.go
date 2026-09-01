@@ -165,7 +165,52 @@ type providerDiagnostics struct {
 	LastInterceptAt          string           `json:"last_intercept_at,omitempty"`
 	LastInterceptProvider    string           `json:"last_intercept_provider,omitempty"`
 	ActivePrefixes           []string         `json:"active_prefixes,omitempty"`
+	RecentEvents             []dashboardEvent `json:"recent_events,omitempty"`
 	Warnings                 []string         `json:"warnings"`
+}
+
+type dashboardEvent struct {
+	At      string `json:"at"`
+	Level   string `json:"level"`
+	Message string `json:"message"`
+}
+
+const maxDashboardEvents = 8
+
+var dashboardEventState struct {
+	sync.RWMutex
+	events []dashboardEvent
+}
+
+func recordDashboardEvent(level, message string) {
+	event := dashboardEvent{
+		At:      time.Now().UTC().Format(time.RFC3339),
+		Level:   strings.ToLower(strings.TrimSpace(level)),
+		Message: strings.TrimSpace(message),
+	}
+	if event.Level == "" {
+		event.Level = "info"
+	}
+	if event.Message == "" {
+		return
+	}
+	dashboardEventState.Lock()
+	dashboardEventState.events = append(dashboardEventState.events, event)
+	if excess := len(dashboardEventState.events) - maxDashboardEvents; excess > 0 {
+		dashboardEventState.events = append([]dashboardEvent(nil), dashboardEventState.events[excess:]...)
+	}
+	dashboardEventState.Unlock()
+}
+
+func recentDashboardEvents() []dashboardEvent {
+	dashboardEventState.RLock()
+	defer dashboardEventState.RUnlock()
+	out := make([]dashboardEvent, len(dashboardEventState.events))
+	copy(out, dashboardEventState.events)
+	for left, right := 0, len(out)-1; left < right; left, right = left+1, right-1 {
+		out[left], out[right] = out[right], out[left]
+	}
+	return out
 }
 
 var interceptState struct {
@@ -190,6 +235,13 @@ func recordExecutorUpstreamStatus(status int) {
 	executorRuntimeState.lastStatus = status
 	executorRuntimeState.lastAt = time.Now().UTC()
 	executorRuntimeState.Unlock()
+	level := "info"
+	if status >= 400 {
+		level = "error"
+	} else if status >= 300 {
+		level = "warning"
+	}
+	recordDashboardEvent(level, fmt.Sprintf("agy2api responded HTTP %d", status))
 }
 
 func candidateFromPayload(payload InterceptRequestPayload, settings PluginSettings) providerCandidate {
@@ -317,6 +369,7 @@ func recordIntercept(candidate providerCandidate) {
 	interceptState.lastAt = time.Now().UTC()
 	interceptState.lastName = displayProviderName(candidate.Name, candidate.ProviderKey, candidate.ToFormat)
 	interceptState.Unlock()
+	recordDashboardEvent("info", "Client request intercepted for the mirrored provider")
 }
 
 func scanProviderDiagnostics() providerDiagnostics {
@@ -486,11 +539,13 @@ func scanProviderDiagnostics() providerDiagnostics {
 	lastStatus := executorRuntimeState.lastStatus
 	lastAt := executorRuntimeState.lastAt
 	executorRuntimeState.Unlock()
-	if lastStatus == 401 || lastStatus == 403 {
+	if lastStatus != 0 {
 		out.LastExecutorStatus = lastStatus
 		if !lastAt.IsZero() {
 			out.LastExecutorErrorAt = lastAt.Format(time.RFC3339)
 		}
+	}
+	if lastStatus == 401 || lastStatus == 403 {
 		if settings.hmacSecret() != "" {
 			out.Warnings = append(out.Warnings,
 				"agy2api signature mismatch - verify AGY_IDENTITY_BRIDGE_SECRET matches the configured plugin secret")
@@ -545,6 +600,7 @@ func scanProviderDiagnostics() providerDiagnostics {
 	}
 	out.LastInterceptProvider = interceptState.lastName
 	interceptState.RUnlock()
+	out.RecentEvents = recentDashboardEvents()
 	out.Warnings = uniqueStrings(out.Warnings)
 	return out
 }

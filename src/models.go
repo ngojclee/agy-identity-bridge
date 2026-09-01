@@ -48,6 +48,7 @@ func currentModelResponse() modelRegistrationResponse {
 		hostLog("warn", "auth record creation failed during model registration", map[string]any{
 			"error": errAuth.Error(),
 		})
+		recordDashboardEvent("error", "Plugin executor auth record could not be created during model registration")
 	}
 	return modelRegistrationResponse{
 		Provider: settings.ExecutorProvider,
