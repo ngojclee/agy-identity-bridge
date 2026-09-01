@@ -413,6 +413,18 @@ func TestHMACSecretPriorityProviderAPIKeyIsFallback(t *testing.T) {
 	}
 }
 
+func TestHMACSecretPriorityEnvBeatsProviderAPIKeyMode(t *testing.T) {
+	loadMirror(t)
+	settings := currentPluginSettings()
+	settings.Agy2apiIdentitySecret = ""
+	settings.HMACSecret = ""
+	settings.HMACSecretSource = "provider_api_key"
+	t.Setenv("AGY_PLUGIN_SECRET", "env-secret")
+	if got := hmacSecretForCandidate(settings, providerCandidate{APIKey: "provider-key"}); got != "env-secret" {
+		t.Fatalf("candidate secret = %q, want env-secret", got)
+	}
+}
+
 // The diagnostics payload and status page must never contain the secret value.
 func TestDiagnosticsNeverLeaksAgy2apiSecret(t *testing.T) {
 	loadMirror(t)

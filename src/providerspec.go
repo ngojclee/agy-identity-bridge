@@ -17,6 +17,7 @@ type providerSpec struct {
 	APIKeys        []string
 	Headers        map[string]string
 	Priority       int
+	SourcePriority int
 	DisableCooling bool
 	Models         []modelSpec
 	// Enabled reports whether the mirrored provider is still live in CPA
@@ -214,6 +215,7 @@ func extractProviderSpec(root map[string]any, settings PluginSettings) (provider
 			APIKeys:        apiKeys,
 			Headers:        compatHeaders(providerMap),
 			Priority:       mirroredPriority,
+			SourcePriority: priority,
 			DisableCooling: cooling,
 			Models:         compatModels(providerMap),
 			Enabled:        !disabled,

@@ -358,13 +358,13 @@ func firstHeaderValue(headers map[string][]string, keys ...string) string {
 }
 
 func hmacSecretForCandidate(settings PluginSettings, candidate providerCandidate) string {
-	if settings.Agy2apiIdentitySecret != "" {
-		return settings.Agy2apiIdentitySecret
+	if secret := settings.hmacSecret(); secret != "" {
+		return secret
 	}
 	if settings.HMACSecretSource == "provider_api_key" {
 		return strings.TrimSpace(candidate.APIKey)
 	}
-	return settings.hmacSecret()
+	return ""
 }
 
 func recordIntercept(candidate providerCandidate) {

@@ -208,14 +208,16 @@ the secret or raw provider API keys in diagnostics.
 
 ## Rollback
 
-The plugin never edits `config.yaml` or touches provider credentials, so
-rollback is a CPA UI operation only:
+The plugin normally mirrors the configured provider without changing it. The
+Provider View dashboard can also save deliberate edits back to `config.yaml`;
+API keys and the agy2api identity secret are write-only there, so leaving those
+fields empty preserves the existing values.
 
 1. Re-enable the original `Antigravity` provider in CPA
    (`openai-compatibility`, toggle the provider back on). CPA reloads the
    config, the plugin receives `plugin.reconfigure`, the collision guard
    re-engages, and the plugin withholds its models again. Traffic returns to
-   CPA's built-in OpenAI executor with the original configuration untouched.
+   CPA's built-in OpenAI executor with the latest saved provider settings.
 2. Optionally set `executor_enabled: false` in the plugin config (or disable
    the plugin) to remove the executor path entirely. Models published by the
    plugin disappear; the interceptor keeps running so identity headers keep
@@ -232,6 +234,11 @@ Authenticated Management API routes:
 
 ```text
 GET  /v0/management/plugins/agy-identity-bridge/status
+GET  /v0/management/plugins/agy-identity-bridge/provider
+GET  /v0/management/plugins/agy-identity-bridge/provider/config
+POST /v0/management/plugins/agy-identity-bridge/provider/save
+POST /v0/management/plugins/agy-identity-bridge/provider/test
+POST /v0/management/plugins/agy-identity-bridge/provider/fetch-models
 GET  /v0/management/plugins/agy-identity-bridge/settings
 POST /v0/management/plugins/agy-identity-bridge/rescan
 ```
@@ -259,13 +266,22 @@ CPA also exposes a redacted browser resource:
 
 ```text
 /v0/resource/plugins/agy-identity-bridge/status
+/v0/resource/plugins/agy-identity-bridge/provider
 ```
 
-This resource intentionally omits config paths, URLs, auth indexes, and
-credential values. CPA serves plugin resource routes without management
-authentication, so account labels (native Antigravity auth labels are account
-emails) are also stripped from this projection. Use the authenticated status
-route when you need them.
+These resources intentionally omit config paths, URLs, auth indexes, and
+credential values until a management key is supplied in the Provider View. CPA
+serves plugin resource routes without management authentication, so account
+labels (native Antigravity auth labels are account emails) are also stripped
+from this projection. Use the authenticated status route when you need them.
+
+The Provider View is a provider-shaped dashboard for the mirrored
+`ln.Antigravity` path. It shows replacement mode, original-provider state,
+published model IDs, recent runtime events, and an editor with the same core
+fields as an OpenAI-compatible provider: name, base URL, prefix, priority,
+disabled state, disable cooling, headers, API keys, and custom models. Saving
+requires the CPA management key and writes only the selected mirrored provider
+plus this plugin's executor settings.
 
 ## CPA Lifecycle Statuses
 
@@ -292,19 +308,19 @@ Go 1.26 and GCC:
 
 ```sh
 make test
-make build VERSION=0.2.6
+make build VERSION=0.2.7
 ```
 
 The output is:
 
 ```text
-dist/agy-identity-bridge-v0.2.0.so
+dist/agy-identity-bridge-v0.2.7.so
 ```
 
 The GitHub Actions workflow builds and packages:
 
 ```text
-agy-identity-bridge_0.2.0_linux_amd64.zip
+agy-identity-bridge_0.2.7_linux_amd64.zip
 checksums.txt
 ```
 
