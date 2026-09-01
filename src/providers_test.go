@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 )
 
 func TestDashboardShowsOperationalState(t *testing.T) {
@@ -53,6 +55,20 @@ func TestDashboardEventBufferStaysBoundedAndNewestFirst(t *testing.T) {
 	events := recentDashboardEvents()
 	if len(events) != maxDashboardEvents {
 		t.Fatalf("event count = %d, want %d", len(events), maxDashboardEvents)
+	}
+}
+
+func TestRequestInterceptBeforeIsHandledAsNoop(t *testing.T) {
+	raw, errHandle := handleMethod(pluginabi.MethodRequestInterceptBefore, nil)
+	if errHandle != nil {
+		t.Fatal(errHandle)
+	}
+	var response envelope
+	if errUnmarshal := json.Unmarshal(raw, &response); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	if !response.OK {
+		t.Fatalf("before interceptor failed: %s", raw)
 	}
 }
 

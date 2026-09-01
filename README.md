@@ -127,6 +127,11 @@ registration. CPA applies the prefix from the plugin-owned auth record, so the
 visible client model remains `agy/<model>` (or the configured namespace)
 without becoming `agy/agy/<model>`.
 
+CPA calls both interceptor phases. The plugin handles `request.intercept_before`
+as an intentional no-op because provider identity and the selected client
+credential are only available in the after-auth phase, where the identity
+headers are added.
+
 `executor_enabled` defaults to false, and installing a new plugin version does
 not change routing on its own.
 

@@ -120,6 +120,11 @@ func handleMethod(method string, request []byte) ([]byte, error) {
 			return errorEnvelope("config_error", errConfigure.Error()), nil
 		}
 		return okEnvelope(pluginRegistration()), nil
+	case pluginabi.MethodRequestInterceptBefore:
+		// Provider identity and the client bearer key are available after CPA
+		// selects auth. The before-auth hook is intentionally a no-op, but it
+		// must still be handled because RequestInterceptor enables both hooks.
+		return okEnvelope(InterceptResponsePayload{}), nil
 	case pluginabi.MethodRequestInterceptAfter:
 		return handleInterceptAfter(request)
 	case pluginabi.MethodModelRegister:
