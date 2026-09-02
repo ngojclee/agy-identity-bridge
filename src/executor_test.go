@@ -6,6 +6,30 @@ import (
 	"testing"
 )
 
+func TestHostHTTPResponseAcceptsSnakeAndPascalKeys(t *testing.T) {
+	var snake hostHTTPResponse
+	if errUnmarshal := json.Unmarshal([]byte(`{"status_code":201,"headers":{"X-A":["v"]},"body":"e30="}`), &snake); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	if snake.StatusCode != 201 || snake.Body != "e30=" || len(snake.Headers["X-A"]) != 1 {
+		t.Fatalf("snake decode = %+v", snake)
+	}
+	var pascal hostHTTPResponse
+	if errUnmarshal := json.Unmarshal([]byte(`{"StatusCode":202,"Headers":{"X-B":["w"]},"Body":"e30="}`), &pascal); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	if pascal.StatusCode != 202 || pascal.Body != "e30=" || len(pascal.Headers["X-B"]) != 1 {
+		t.Fatalf("pascal decode = %+v", pascal)
+	}
+	var stream hostHTTPStreamStart
+	if errUnmarshal := json.Unmarshal([]byte(`{"StreamID":"s1","StatusCode":200}`), &stream); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	if stream.StreamID != "s1" || stream.StatusCode != 200 {
+		t.Fatalf("stream pascal decode = %+v", stream)
+	}
+}
+
 func TestExecutorRegistrationOnlyWhenEnabled(t *testing.T) {
 	loadMirror(t)
 	caps := registrationCapabilities()

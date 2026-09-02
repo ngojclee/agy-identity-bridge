@@ -290,15 +290,103 @@ func (r hostHTTPRequest) marshal() []byte {
 }
 
 type hostHTTPResponse struct {
-	StatusCode int                 `json:"status_code"`
-	Headers    map[string][]string `json:"headers"`
-	Body       string              `json:"body"`
+	StatusCode int
+	Headers    map[string][]string
+	Body       string
 }
 
 type hostHTTPStreamStart struct {
-	StatusCode int                 `json:"status_code"`
-	Headers    map[string][]string `json:"headers"`
-	StreamID   string              `json:"stream_id"`
+	StatusCode int
+	Headers    map[string][]string
+	StreamID   string
+}
+
+// CPA's host callback structs evolved across releases: the stream bridge
+// marshals snake_case JSON while the non-stream HTTPResponse is an untagged
+// pluginapi struct that encodes PascalCase Go field names. Decode both so
+// plugin upgrades stay compatible with whichever CPA build is deployed.
+func (r *hostHTTPResponse) UnmarshalJSON(data []byte) error {
+	keys, errDecode := decodeJSONKeys(data)
+	if errDecode != nil {
+		return errDecode
+	}
+	if code, ok := intFromKeys(keys, "status_code", "statusCode", "StatusCode", "status"); ok {
+		r.StatusCode = code
+	}
+	if headers, ok := headersFromKeys(keys, "headers", "Headers"); ok {
+		r.Headers = headers
+	}
+	if body, ok := stringFromKeys(keys, "body", "Body"); ok {
+		r.Body = body
+	}
+	return nil
+}
+
+func (s *hostHTTPStreamStart) UnmarshalJSON(data []byte) error {
+	keys, errDecode := decodeJSONKeys(data)
+	if errDecode != nil {
+		return errDecode
+	}
+	if code, ok := intFromKeys(keys, "status_code", "statusCode", "StatusCode", "status"); ok {
+		s.StatusCode = code
+	}
+	if headers, ok := headersFromKeys(keys, "headers", "Headers"); ok {
+		s.Headers = headers
+	}
+	if id, ok := stringFromKeys(keys, "stream_id", "StreamID"); ok {
+		s.StreamID = id
+	}
+	return nil
+}
+
+func decodeJSONKeys(data []byte) (map[string]json.RawMessage, error) {
+	var keys map[string]json.RawMessage
+	if errUnmarshal := json.Unmarshal(data, &keys); errUnmarshal != nil {
+		return nil, errUnmarshal
+	}
+	return keys, nil
+}
+
+func intFromKeys(keys map[string]json.RawMessage, names ...string) (int, bool) {
+	for _, name := range names {
+		raw, ok := keys[name]
+		if !ok {
+			continue
+		}
+		var value int
+		if errUnmarshal := json.Unmarshal(raw, &value); errUnmarshal == nil {
+			return value, true
+		}
+	}
+	return 0, false
+}
+
+func stringFromKeys(keys map[string]json.RawMessage, names ...string) (string, bool) {
+	for _, name := range names {
+		raw, ok := keys[name]
+		if !ok {
+			continue
+		}
+		var value string
+		if errUnmarshal := json.Unmarshal(raw, &value); errUnmarshal == nil {
+			return value, true
+		}
+	}
+	return "", false
+}
+
+func headersFromKeys(keys map[string]json.RawMessage, names ...string) (map[string][]string, bool) {
+	for _, name := range names {
+		raw, ok := keys[name]
+		if !ok {
+			continue
+		}
+		var value map[string][]string
+		if errUnmarshal := json.Unmarshal(raw, &value); errUnmarshal == nil {
+			return value, true
+		}
+	}
+	return nil, false
 }
 
 type hostHTTPStreamRead struct {
