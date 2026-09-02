@@ -16,8 +16,9 @@ For a matched request the plugin:
 
 The plugin does not modify unrelated providers.
 
-Release 0.2.9 keeps the identity bridge canonical payload stable for agy2api
-while preserving the legacy signing fallback during the transition period.
+Release 0.2.10 keeps the identity bridge canonical payload stable for agy2api
+while preserving the legacy signing fallback during the transition period and
+adds passive usage telemetry for the mirrored provider.
 
 ## CPA Configuration
 
@@ -270,6 +271,7 @@ CPA also exposes a redacted browser resource:
 ```text
 /v0/resource/plugins/agy-identity-bridge/status
 /v0/resource/plugins/agy-identity-bridge/provider
+/v0/resource/plugins/agy-identity-bridge/usage
 ```
 
 These resources intentionally omit config paths, URLs, auth indexes, and
@@ -285,6 +287,11 @@ fields as an OpenAI-compatible provider: name, base URL, prefix, priority,
 disabled state, disable cooling, headers, API keys, and custom models. Saving
 requires the CPA management key and writes only the selected mirrored provider
 plus this plugin's executor settings.
+
+The Usage View is a separate sidecar for passive token telemetry. It reads
+`usage` data from agy2api responses when present, keeps the response body and
+headers untouched for other trackers, and groups the statistics by current
+month, hour/day bucket, and source. It is intentionally read-only.
 
 ## CPA Lifecycle Statuses
 
@@ -311,19 +318,19 @@ Go 1.26 and GCC:
 
 ```sh
 make test
-make build VERSION=0.2.9
+make build VERSION=0.2.10
 ```
 
 The output is:
 
 ```text
-dist/agy-identity-bridge-v0.2.9.so
+dist/agy-identity-bridge-v0.2.10.so
 ```
 
 The GitHub Actions workflow builds and packages:
 
 ```text
-agy-identity-bridge_0.2.9_linux_amd64.zip
+agy-identity-bridge_0.2.10_linux_amd64.zip
 checksums.txt
 ```
 

@@ -383,6 +383,7 @@ func handleExecutorExecute(raw []byte) ([]byte, error) {
 	if errParse != nil {
 		return errorEnvelope("parse_error", errParse.Error()), nil
 	}
+	visibleModel := req.Model
 	spec, found := resolveProviderSpec()
 	if !found {
 		return errorEnvelope("provider_unresolved", "no mirrored provider is configured"), nil
@@ -402,6 +403,7 @@ func handleExecutorExecute(raw []byte) ([]byte, error) {
 		return errorEnvelope("upstream_decode_failed", errDecode.Error()), nil
 	}
 	recordExecutorUpstreamStatus(response.StatusCode)
+	recordUsageFromExecutorResponse(unb64(response.Body), response.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "execute")
 	if response.StatusCode < 200 || response.StatusCode > 299 {
 		// surfaced verbatim so agy2api's own error detail reaches the client
 		return errorEnvelope("upstream_error", fmt.Sprintf(
@@ -418,6 +420,7 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 	if errParse != nil {
 		return errorEnvelope("parse_error", errParse.Error()), nil
 	}
+	visibleModel := req.Model
 	spec, found := resolveProviderSpec()
 	if !found {
 		return errorEnvelope("provider_unresolved", "no mirrored provider is configured"), nil
@@ -441,6 +444,7 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 	}
 
 	chunks := make([]streamChunk, 0, 32)
+	var streamUsageBuffer []byte
 	defer hostCall(pluginabi.MethodHostHTTPStreamClose, []byte(fmt.Sprintf(`{"StreamID":%q}`, start.StreamID)))
 	for {
 		readRaw, errRead := hostCall(pluginabi.MethodHostHTTPStreamRead, []byte(fmt.Sprintf(`{"StreamID":%q}`, start.StreamID)))
@@ -456,11 +460,14 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 		}
 		if payload := unb64(read.Payload); len(payload) > 0 {
 			chunks = append(chunks, streamChunk{Payload: b64(payload)})
+			streamUsageBuffer = append(streamUsageBuffer, payload...)
+			streamUsageBuffer = append(streamUsageBuffer, '\n')
 		}
 		if read.Done {
 			break
 		}
 	}
+	recordUsageFromExecutorResponse(streamUsageBuffer, start.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "stream")
 	return okEnvelope(executorEnvelope{
 		Headers: start.Headers,
 		Chunks:  chunks,
@@ -472,6 +479,7 @@ func handleExecutorCountTokens(raw []byte) ([]byte, error) {
 	if errParse != nil {
 		return errorEnvelope("parse_error", errParse.Error()), nil
 	}
+	visibleModel := req.Model
 	spec, found := resolveProviderSpec()
 	if !found {
 		return errorEnvelope("provider_unresolved", "no mirrored provider is configured"), nil
@@ -491,6 +499,7 @@ func handleExecutorCountTokens(raw []byte) ([]byte, error) {
 		return errorEnvelope("upstream_decode_failed", errDecode.Error()), nil
 	}
 	recordExecutorUpstreamStatus(response.StatusCode)
+	recordUsageFromExecutorResponse(unb64(response.Body), response.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "count_tokens")
 	return okEnvelope(executorEnvelope{
 		Payload: b64(unb64(response.Body)),
 		Headers: response.Headers,

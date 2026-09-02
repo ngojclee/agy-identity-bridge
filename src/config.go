@@ -159,7 +159,6 @@ func normalizeSettings(s PluginSettings) PluginSettings {
 	} else {
 		s.AllowExplicitClientIdentityHeaders = true
 	}
-	s.DebugLogging = s.DebugLogging
 	return s
 }
 

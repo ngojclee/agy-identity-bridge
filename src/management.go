@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -43,6 +44,11 @@ func handleManagementRegister() []byte {
 				Menu:        "AGY Provider View",
 				Description: "Provider-shaped dashboard for the mirrored AGY provider.",
 			},
+			{
+				Path:        "/usage",
+				Menu:        "AGY Usage View",
+				Description: "Passive usage telemetry for the mirrored AGY provider.",
+			},
 		},
 	})
 }
@@ -54,7 +60,7 @@ func handleManagement(raw []byte) ([]byte, error) {
 			"error": "invalid management request",
 		}), nil
 	}
-	path, isResource := normalizeManagementPath(request.Path)
+	path, isResource, query := normalizeManagementPath(request.Path)
 
 	if isResource {
 		switch {
@@ -62,6 +68,8 @@ func handleManagement(raw []byte) ([]byte, error) {
 			return managementHTMLResponse(http.StatusOK, publicStatusPage(scanProviderDiagnostics())), nil
 		case request.Method == http.MethodGet && path == "/provider":
 			return managementHTMLResponse(http.StatusOK, providerResourcePage(scanProviderDiagnostics())), nil
+		case request.Method == http.MethodGet && path == "/usage":
+			return managementHTMLResponse(http.StatusOK, usageRoutePage(scanProviderDiagnostics(), query)), nil
 		case request.Method == http.MethodGet && path == "/data":
 			return managementJSONResponse(http.StatusOK, publicProviderDiagnostics(scanProviderDiagnostics())), nil
 		default:
@@ -76,6 +84,10 @@ func handleManagement(raw []byte) ([]byte, error) {
 		return managementHTMLResponse(http.StatusOK, providerDetailPage(scanProviderDiagnostics())), nil
 	case request.Method == http.MethodGet && path == "/provider/config":
 		return managementJSONResponse(http.StatusOK, currentProviderEditorData(scanProviderDiagnostics(), true)), nil
+	case request.Method == http.MethodGet && path == "/usage":
+		return managementHTMLResponse(http.StatusOK, usageRoutePage(scanProviderDiagnostics(), query)), nil
+	case request.Method == http.MethodGet && path == "/usage/data":
+		return usageRouteJSON(scanProviderDiagnostics(), query), nil
 	case request.Method == http.MethodPost && path == "/provider/save":
 		return handleProviderEditorSave(request)
 	case request.Method == http.MethodPost && path == "/provider/test":
@@ -91,8 +103,16 @@ func handleManagement(raw []byte) ([]byte, error) {
 	}
 }
 
-func normalizeManagementPath(path string) (string, bool) {
+func normalizeManagementPath(path string) (string, bool, url.Values) {
+	query := url.Values{}
 	isResource := false
+	parsed, errParse := url.Parse(path)
+	if errParse == nil {
+		if parsed.RawQuery != "" {
+			query = parsed.Query()
+		}
+		path = parsed.Path
+	}
 	if index := strings.Index(path, "/v0/resource/plugins/"+pluginID); index >= 0 {
 		path = path[index+len("/v0/resource/plugins/"+pluginID):]
 		isResource = true
@@ -104,7 +124,7 @@ func normalizeManagementPath(path string) (string, bool) {
 	if path == "" {
 		path = "/"
 	}
-	return path, isResource
+	return path, isResource, query
 }
 
 func managementSettings() map[string]any {
@@ -251,6 +271,7 @@ func dashboardHTML(diagnostics providerDiagnostics, detail bool) string {
 	}
 
 	providerLink := "/v0/resource/plugins/" + pluginID + "/provider"
+	usageLink := "/v0/resource/plugins/" + pluginID + "/usage"
 	backLink := "/v0/resource/plugins/" + pluginID + "/status"
 	actionLabel := "Provider view"
 	actionLink := providerLink
@@ -259,6 +280,7 @@ func dashboardHTML(diagnostics providerDiagnostics, detail bool) string {
 		actionLink = backLink
 	}
 	actionButton := fmt.Sprintf(`<a class="button button-link" href="%s">%s</a>`, html.EscapeString(actionLink), html.EscapeString(actionLabel))
+	usageButton := fmt.Sprintf(`<a class="button button-link" href="%s">Usage view</a>`, html.EscapeString(usageLink))
 	modelMode := diagnostics.ReplacementMode
 	if modelMode == "" {
 		modelMode = "unknown"
@@ -335,7 +357,7 @@ details{border:1px solid var(--line);border-radius:var(--radius);background:var(
 </head>
 <body>
 <main>
-<div class="page-head"><div class="row between"><div><h1>AGY Identity Bridge</h1><div class="subtitle">Antigravity bridge diagnostics and runtime status</div></div><div class="row">%s<button class="button" onclick="location.reload()">Refresh</button></div></div></div>
+<div class="page-head"><div class="row between"><div><h1>AGY Identity Bridge</h1><div class="subtitle">Antigravity bridge diagnostics and runtime status</div></div><div class="row">%s%s<button class="button" onclick="location.reload()">Refresh</button></div></div></div>
 <section class="hero">
 <div class="route"><span class="route-node">%s</span><span>&rarr;</span><span class="route-node">%s</span><span>&rarr;</span><span class="route-node">agy2api</span></div>
 <div class="route-state"><div><div class="state-label">Route state</div><p><strong>%s</strong></p></div><span class="pill tone-%s">%s</span></div>
@@ -357,6 +379,7 @@ details{border:1px solid var(--line);border-radius:var(--radius);background:var(
 </body>
 </html>`,
 		actionButton,
+		usageButton,
 		html.EscapeString(mirrored),
 		html.EscapeString(executor),
 		html.EscapeString(state.label),
