@@ -290,21 +290,21 @@ func (r hostHTTPRequest) marshal() []byte {
 }
 
 type hostHTTPResponse struct {
-	StatusCode int                 `json:"StatusCode"`
-	Headers    map[string][]string `json:"Headers"`
-	Body       string              `json:"Body"`
+	StatusCode int                 `json:"status_code"`
+	Headers    map[string][]string `json:"headers"`
+	Body       string              `json:"body"`
 }
 
 type hostHTTPStreamStart struct {
-	StatusCode int                 `json:"StatusCode"`
-	Headers    map[string][]string `json:"Headers"`
-	StreamID   string              `json:"StreamID"`
+	StatusCode int                 `json:"status_code"`
+	Headers    map[string][]string `json:"headers"`
+	StreamID   string              `json:"stream_id"`
 }
 
 type hostHTTPStreamRead struct {
-	Payload string `json:"Payload"`
-	Error   string `json:"Error"`
-	Done    bool   `json:"Done"`
+	Payload string `json:"payload"`
+	Error   string `json:"error"`
+	Done    bool   `json:"done"`
 }
 
 func b64(raw []byte) string {
@@ -501,9 +501,9 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 
 	chunks := make([]streamChunk, 0, 32)
 	var streamUsageBuffer []byte
-	defer hostCall(pluginabi.MethodHostHTTPStreamClose, []byte(fmt.Sprintf(`{"StreamID":%q}`, start.StreamID)))
+	defer hostCall(pluginabi.MethodHostHTTPStreamClose, []byte(fmt.Sprintf(`{"stream_id":%q}`, start.StreamID)))
 	for {
-		readRaw, errRead := hostCall(pluginabi.MethodHostHTTPStreamRead, []byte(fmt.Sprintf(`{"StreamID":%q}`, start.StreamID)))
+		readRaw, errRead := hostCall(pluginabi.MethodHostHTTPStreamRead, []byte(fmt.Sprintf(`{"stream_id":%q}`, start.StreamID)))
 		if errRead != nil {
 			return errorEnvelope("upstream_stream_failed", errRead.Error()), nil
 		}
