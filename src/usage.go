@@ -360,6 +360,12 @@ func normalizeUsageFilter(values url.Values) usageFilter {
 	switch filter.Period {
 	case "", "current_month", "month":
 		filter.Period = "current_month"
+	case "last_5_hours", "5h":
+		filter.Period = "last_5_hours"
+	case "last_7_days", "7d":
+		filter.Period = "last_7_days"
+	case "last_30_days", "30d":
+		filter.Period = "last_30_days"
 	case "all", "all_time":
 		filter.Period = "all_time"
 	default:
@@ -370,6 +376,12 @@ func normalizeUsageFilter(values url.Values) usageFilter {
 		filter.Bucket = "hour"
 	case "day":
 		filter.Bucket = "day"
+	case "minute":
+		filter.Bucket = "minute"
+	case "week":
+		filter.Bucket = "week"
+	case "month":
+		filter.Bucket = "month"
 	default:
 		filter.Bucket = "hour"
 	}
@@ -489,9 +501,22 @@ func usageDashboardData(diag providerDiagnostics, filter usageFilter) usagePageD
 }
 
 func recordMatchesUsageFilter(record usageRecord, filter usageFilter) bool {
-	if filter.Period == "current_month" {
-		now := time.Now().UTC()
-		recordAt := record.At.UTC()
+	now := time.Now().UTC()
+	recordAt := record.At.UTC()
+	switch filter.Period {
+	case "last_5_hours":
+		if recordAt.Before(now.Add(-5 * time.Hour)) {
+			return false
+		}
+	case "last_7_days":
+		if recordAt.Before(now.Add(-7 * 24 * time.Hour)) {
+			return false
+		}
+	case "last_30_days":
+		if recordAt.Before(now.Add(-30 * 24 * time.Hour)) {
+			return false
+		}
+	case "current_month":
 		if recordAt.Year() != now.Year() || recordAt.Month() != now.Month() {
 			return false
 		}
@@ -621,9 +646,24 @@ func groupUsageGroups(records []usageRecord, labelFn func(usageRecord) string) [
 func usageBucketLabel(at time.Time, bucket string) (string, time.Time) {
 	at = at.UTC()
 	switch bucket {
+	case "minute":
+		base := time.Date(at.Year(), at.Month(), at.Day(), at.Hour(), at.Minute(), 0, 0, time.UTC)
+		return base.Format("Jan 02 15:04"), base
 	case "day":
 		base := time.Date(at.Year(), at.Month(), at.Day(), 0, 0, 0, 0, time.UTC)
 		return base.Format("2006-01-02"), base
+	case "week":
+		year, week := at.ISOWeek()
+		weekday := int(at.Weekday())
+		if weekday == 0 {
+			weekday = 7
+		}
+		base := at.AddDate(0, 0, -(weekday - 1))
+		base = time.Date(base.Year(), base.Month(), base.Day(), 0, 0, 0, 0, time.UTC)
+		return fmt.Sprintf("%04d-W%02d", year, week), base
+	case "month":
+		base := time.Date(at.Year(), at.Month(), 1, 0, 0, 0, 0, time.UTC)
+		return base.Format("2006-01"), base
 	default:
 		base := time.Date(at.Year(), at.Month(), at.Day(), at.Hour(), 0, 0, 0, time.UTC)
 		return base.Format("Jan 02 15:00"), base
@@ -722,14 +762,8 @@ func usagePercent(value, total int64) string {
 }
 
 func usageFilterLabel(filter usageFilter) string {
-	period := "Current month"
-	if filter.Period == "all_time" {
-		period = "All time"
-	}
-	bucket := "By hour"
-	if filter.Bucket == "day" {
-		bucket = "By day"
-	}
+	period := usagePeriodLabel(filter.Period)
+	bucket := usageBucketLabelText(filter.Bucket)
 	source := "All sources"
 	if filter.Source != "" && filter.Source != "all" {
 		source = filter.Source
@@ -737,24 +771,60 @@ func usageFilterLabel(filter usageFilter) string {
 	return period + " / " + bucket + " / " + source
 }
 
+func usagePeriodLabel(period string) string {
+	switch period {
+	case "last_5_hours":
+		return "Last 5 hours"
+	case "last_7_days":
+		return "Last 7 days"
+	case "last_30_days":
+		return "Last 30 days"
+	case "all_time":
+		return "All time"
+	default:
+		return "Current month"
+	}
+}
+
+func usageBucketLabelText(bucket string) string {
+	switch bucket {
+	case "minute":
+		return "By minute"
+	case "day":
+		return "By day"
+	case "week":
+		return "By week"
+	case "month":
+		return "By month"
+	default:
+		return "By hour"
+	}
+}
+
 func renderUsageFilterForm(data usagePageData, action, prefix string) string {
 	return fmt.Sprintf(`<form class="usage-filters" method="get" action="%s">
 <label><span>Period</span><select id="%s-period" name="period">
-<option value="current_month"%s>Current month</option><option value="all_time"%s>All time</option>
+<option value="last_5_hours"%s>Last 5 hours</option><option value="last_7_days"%s>Last 7 days</option><option value="last_30_days"%s>Last 30 days</option><option value="current_month"%s>Current month</option><option value="all_time"%s>All time</option>
 </select></label>
 <label><span>Bucket</span><select id="%s-bucket" name="bucket">
-<option value="hour"%s>By hour</option><option value="day"%s>By day</option>
+<option value="minute"%s>By minute</option><option value="hour"%s>By hour</option><option value="day"%s>By day</option><option value="week"%s>By week</option><option value="month"%s>By month</option>
 </select></label>
 <label><span>Source</span><select id="%s-source" name="source">%s</select></label>
 <button class="btn" type="submit">Apply</button>
 </form>`,
 		html.EscapeString(action),
 		html.EscapeString(prefix),
+		usageSelected(data.Filters.Period, "last_5_hours"),
+		usageSelected(data.Filters.Period, "last_7_days"),
+		usageSelected(data.Filters.Period, "last_30_days"),
 		usageSelected(data.Filters.Period, "current_month"),
 		usageSelected(data.Filters.Period, "all_time"),
 		html.EscapeString(prefix),
+		usageSelected(data.Filters.Bucket, "minute"),
 		usageSelected(data.Filters.Bucket, "hour"),
 		usageSelected(data.Filters.Bucket, "day"),
+		usageSelected(data.Filters.Bucket, "week"),
+		usageSelected(data.Filters.Bucket, "month"),
 		html.EscapeString(prefix),
 		renderSourceOptions(data.Filters.Source, data.AvailableSource),
 	)
@@ -910,14 +980,8 @@ func usageDashboardHTML(data usagePageData) string {
 	if statusLabel == "" {
 		statusLabel = "unknown"
 	}
-	periodLabel := "Current month"
-	if data.Filters.Period == "all_time" {
-		periodLabel = "All time"
-	}
-	bucketLabel := "By hour"
-	if data.Filters.Bucket == "day" {
-		bucketLabel = "By day"
-	}
+	periodLabel := usagePeriodLabel(data.Filters.Period)
+	bucketLabel := usageBucketLabelText(data.Filters.Bucket)
 	sourceLabel := "All sources"
 	if data.Filters.Source != "" && data.Filters.Source != "all" {
 		sourceLabel = data.Filters.Source
@@ -1016,12 +1080,18 @@ a{color:inherit;text-decoration:none}
 <div class="drawer-body">
 <form class="panel" method="get" action="/v0/resource/plugins/%s/usage">
 <div class="field"><label for="period">Period</label><select id="period" name="period" onchange="this.form.submit()">
+<option value="last_5_hours"%s>Last 5 hours</option>
+<option value="last_7_days"%s>Last 7 days</option>
+<option value="last_30_days"%s>Last 30 days</option>
 <option value="current_month"%s>Current month</option>
 <option value="all_time"%s>All time</option>
 </select></div>
 <div class="field"><label for="bucket">Bucket</label><select id="bucket" name="bucket" onchange="this.form.submit()">
+<option value="minute"%s>By minute</option>
 <option value="hour"%s>By hour</option>
 <option value="day"%s>By day</option>
+<option value="week"%s>By week</option>
+<option value="month"%s>By month</option>
 </select></div>
 <div class="field"><label for="source">Source</label><select id="source" name="source" onchange="this.form.submit()">%s</select></div>
 <div class="actions"><button class="btn primary" type="submit">Apply</button><a class="btn" href="/v0/resource/plugins/%s/usage">Reset</a></div>
@@ -1054,10 +1124,16 @@ a{color:inherit;text-decoration:none}
 		statusPillClass(statusLabel),
 		html.EscapeString(statusLabel),
 		pluginID,
+		usageSelected(data.Filters.Period, "last_5_hours"),
+		usageSelected(data.Filters.Period, "last_7_days"),
+		usageSelected(data.Filters.Period, "last_30_days"),
 		usageSelected(data.Filters.Period, "current_month"),
 		usageSelected(data.Filters.Period, "all_time"),
+		usageSelected(data.Filters.Bucket, "minute"),
 		usageSelected(data.Filters.Bucket, "hour"),
 		usageSelected(data.Filters.Bucket, "day"),
+		usageSelected(data.Filters.Bucket, "week"),
+		usageSelected(data.Filters.Bucket, "month"),
 		renderSourceOptions(data.Filters.Source, data.AvailableSource),
 		pluginID,
 		html.EscapeString(firstNonEmpty(data.Diagnostics.MirroredProvider, "No mirrored provider")),

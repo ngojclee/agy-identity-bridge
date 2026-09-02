@@ -10,13 +10,14 @@ For a matched request the plugin:
 
 1. Reads the selected request context after CPA authentication.
 2. Derives an opaque SHA-256 principal from the Bearer token.
-3. Detects the client application from `X-AGY-Client-App` or `User-Agent`.
+3. Detects the client application from `X-AGY-Client-App` or a small,
+   conservative User-Agent classifier.
 4. Adds `X-AGY-Principal`, `X-AGY-Client-App`, and optionally
    `X-AGY-Signature`.
 
 The plugin does not modify unrelated providers.
 
-Release 0.2.13 keeps the identity bridge canonical payload stable for agy2api
+Release 0.2.14 keeps the identity bridge canonical payload stable for agy2api
 while preserving the legacy signing fallback during the transition period and
 adds passive usage telemetry for the mirrored provider.
 
@@ -295,9 +296,26 @@ settings.
 
 Usage analytics reads `usage` data from agy2api responses when present, keeps
 the response body and headers untouched for other trackers, and groups the
-statistics by period, hour/day bucket, source, model share, client source,
-cache performance, and recent observations. It remains passive and
-read-only.
+statistics by period, minute/hour/day/week/month bucket, source, model share,
+client source, cache performance, and recent observations. The period presets
+are `Last 5 hours`, `Last 7 days`, `Last 30 days`, `Current month`, and
+`All time`.
+
+### Client identity and transport User-Agent
+
+`User-Agent` identifies the transport layer more reliably than the originating
+application. For example, `openai/python 2.24.0` is recorded as
+`openai-python`; it must not be interpreted as Hermes. The plugin cannot
+reliably recover the original application from that adapter string.
+
+When agy2api must apply app-specific connector, skill, or MCP policy, the
+originating client should send a trusted explicit identity header such as
+`X-AGY-Client-App: hermes`, preferably with
+`X-AGY-Client-Instance` and `X-AGY-Capability-Profile`. The plugin preserves
+those explicit values, includes them in the stable principal/signature
+contract, and never guesses Hermes from `openai/python`. If no explicit
+identity is available, use a separate client key or session context for each
+application installation.
 
 ## CPA Lifecycle Statuses
 
@@ -324,19 +342,19 @@ Go 1.26 and GCC:
 
 ```sh
 make test
-make build VERSION=0.2.13
+make build VERSION=0.2.14
 ```
 
 The output is:
 
 ```text
-dist/agy-identity-bridge-v0.2.13.so
+dist/agy-identity-bridge-v0.2.14.so
 ```
 
 The GitHub Actions workflow builds and packages:
 
 ```text
-agy-identity-bridge_0.2.13_linux_amd64.zip
+agy-identity-bridge_0.2.14_linux_amd64.zip
 checksums.txt
 ```
 

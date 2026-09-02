@@ -83,8 +83,14 @@ func TestUsageDashboardHTMLIncludesFiltersAndOverview(t *testing.T) {
 	}, normalizeUsageFilter(url.Values{})))
 	for _, expected := range []string{
 		"AGY Usage View",
+		"Last 5 hours",
+		"Last 7 days",
+		"Last 30 days",
 		"Current month",
+		"By minute",
 		"By hour",
+		"By week",
+		"By month",
 		"All sources",
 		"Usage overview",
 		"Top models",
@@ -93,6 +99,41 @@ func TestUsageDashboardHTMLIncludesFiltersAndOverview(t *testing.T) {
 	} {
 		if !strings.Contains(page, expected) {
 			t.Fatalf("usage dashboard missing %q", expected)
+		}
+	}
+}
+
+func TestUsageFilterPeriodsAndBuckets(t *testing.T) {
+	now := time.Now().UTC()
+	records := []usageRecord{
+		{At: now.Add(-2 * time.Hour), ClientApp: "hermes", TotalTokens: 20},
+		{At: now.Add(-8 * 24 * time.Hour), ClientApp: "hermes", TotalTokens: 20},
+		{At: now.Add(-31 * 24 * time.Hour), ClientApp: "hermes", TotalTokens: 20},
+	}
+	for _, test := range []struct {
+		period string
+		want   int
+	}{
+		{"last_5_hours", 1},
+		{"last_7_days", 1},
+		{"last_30_days", 2},
+	} {
+		filter := normalizeUsageFilter(url.Values{"period": {test.period}, "bucket": {"day"}})
+		count := 0
+		for _, record := range records {
+			if recordMatchesUsageFilter(record, filter) {
+				count++
+			}
+		}
+		if count != test.want {
+			t.Fatalf("%s matched %d records, want %d", test.period, count, test.want)
+		}
+	}
+
+	for _, bucket := range []string{"minute", "hour", "day", "week", "month"} {
+		label, order := usageBucketLabel(now, bucket)
+		if label == "" || order.IsZero() {
+			t.Fatalf("bucket %s returned empty label/order", bucket)
 		}
 	}
 }

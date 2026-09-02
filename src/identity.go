@@ -165,8 +165,13 @@ func normalizeClientApp(clientApp, userAgent string) string {
 		return "hermes"
 	case strings.Contains(ua, "cursor"):
 		return "cursor"
+	case strings.Contains(ua, "openai/python"):
+		// This identifies the transport SDK, not the originating product.
+		// Do not label it as Hermes or another app without an explicit
+		// X-AGY-Client-App header.
+		return "openai-python"
 	case ua != "":
-		return ua
+		return "unknown"
 	default:
 		return "unknown"
 	}

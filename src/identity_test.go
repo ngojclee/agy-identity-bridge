@@ -60,6 +60,19 @@ func TestExtractClientApp(t *testing.T) {
 	if got := extractClientApp(customHeaders); got != "my-custom-app" {
 		t.Errorf("expected my-custom-app, got %q", got)
 	}
+
+	adapterHeaders := map[string][]string{
+		"User-Agent": {"openai/python 2.24.0"},
+	}
+	if got := extractClientApp(adapterHeaders); got != "openai-python" {
+		t.Errorf("expected openai-python transport label, got %q", got)
+	}
+	if got := normalizeClientApp("", "openai/python 2.24.0"); got != "openai-python" {
+		t.Errorf("expected normalized openai-python transport label, got %q", got)
+	}
+	if got := normalizeClientApp("", "some-unrecognized-client/1.0"); got != "unknown" {
+		t.Errorf("unrecognized user agents must not be treated as app identity, got %q", got)
+	}
 }
 
 func TestComputeHMAC(t *testing.T) {

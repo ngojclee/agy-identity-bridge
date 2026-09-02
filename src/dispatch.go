@@ -417,8 +417,10 @@ func extractClientApp(headers map[string][]string) string {
 				return "hermes"
 			case strings.Contains(ua, "cursor"):
 				return "cursor"
+			case strings.Contains(ua, "openai/python"):
+				return "openai-python"
 			default:
-				return strings.TrimSpace(values[0])
+				return "unknown"
 			}
 		}
 	}
