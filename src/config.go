@@ -20,21 +20,24 @@ const pluginID = "agy-identity-bridge"
 // the HMAC secret so a provider credential cannot be exposed accidentally by
 // diagnostics or used for signing unless that mode is explicitly selected.
 type PluginSettings struct {
-	Enabled                  bool     `yaml:"enabled" json:"enabled"`
-	Priority                 int      `yaml:"priority" json:"priority"`
-	AutoDiscover             bool     `yaml:"auto_discover" json:"auto_discover"`
-	IncludeNativeAntigravity bool     `yaml:"include_native_antigravity" json:"include_native_antigravity"`
-	MatchMode                string   `yaml:"match_mode" json:"match_mode"`
-	MatchName                string   `yaml:"match_name" json:"match_name"`
-	MatchURL                 string   `yaml:"match_url" json:"match_url"`
-	MatchAPIKey              string   `yaml:"match_api_key" json:"match_api_key"`
-	MatchProvider            string   `yaml:"match_provider" json:"match_provider"`
-	MatchProviders           []string `yaml:"match_providers" json:"match_providers"`
-	MatchModel               string   `yaml:"match_model" json:"match_model"`
-	MatchModels              []string `yaml:"match_models" json:"match_models"`
-	HMACSecret               string   `yaml:"hmac_secret" json:"hmac_secret"`
-	HMACSecretSource         string   `yaml:"hmac_secret_source" json:"hmac_secret_source"`
-	Agy2apiIdentitySecret    string   `yaml:"agy2api_identity_secret" json:"agy2api_identity_secret"`
+	Enabled                            bool     `yaml:"enabled" json:"enabled"`
+	Priority                           int      `yaml:"priority" json:"priority"`
+	AutoDiscover                       bool     `yaml:"auto_discover" json:"auto_discover"`
+	IncludeNativeAntigravity           bool     `yaml:"include_native_antigravity" json:"include_native_antigravity"`
+	AllowExplicitClientIdentityHeaders bool     `yaml:"allow_explicit_client_identity_headers" json:"allow_explicit_client_identity_headers"`
+	PrincipalFallbackMode              string   `yaml:"principal_fallback_mode" json:"principal_fallback_mode"`
+	DebugLogging                       bool     `yaml:"debug_logging" json:"debug_logging"`
+	MatchMode                          string   `yaml:"match_mode" json:"match_mode"`
+	MatchName                          string   `yaml:"match_name" json:"match_name"`
+	MatchURL                           string   `yaml:"match_url" json:"match_url"`
+	MatchAPIKey                        string   `yaml:"match_api_key" json:"match_api_key"`
+	MatchProvider                      string   `yaml:"match_provider" json:"match_provider"`
+	MatchProviders                     []string `yaml:"match_providers" json:"match_providers"`
+	MatchModel                         string   `yaml:"match_model" json:"match_model"`
+	MatchModels                        []string `yaml:"match_models" json:"match_models"`
+	HMACSecret                         string   `yaml:"hmac_secret" json:"hmac_secret"`
+	HMACSecretSource                   string   `yaml:"hmac_secret_source" json:"hmac_secret_source"`
+	Agy2apiIdentitySecret              string   `yaml:"agy2api_identity_secret" json:"agy2api_identity_secret"`
 
 	// Executor mode makes this plugin the caller for the mirrored provider, so
 	// identity headers survive to agy2api. Disabled by default: installing a
@@ -67,12 +70,14 @@ var (
 
 func defaultPluginSettings() PluginSettings {
 	return PluginSettings{
-		Enabled:                  true,
-		AutoDiscover:             true,
-		IncludeNativeAntigravity: true,
-		MatchMode:                "any",
-		HMACSecretSource:         "env",
-		ExecutorProvider:         defaultExecutorProvider,
+		Enabled:                            true,
+		AutoDiscover:                       true,
+		IncludeNativeAntigravity:           true,
+		AllowExplicitClientIdentityHeaders: true,
+		PrincipalFallbackMode:              "client_key_hash",
+		MatchMode:                          "any",
+		HMACSecretSource:                   "env",
+		ExecutorProvider:                   defaultExecutorProvider,
 	}
 }
 
@@ -85,6 +90,15 @@ func normalizeSettings(s PluginSettings) PluginSettings {
 	s.MatchMode = strings.ToLower(strings.TrimSpace(s.MatchMode))
 	if s.MatchMode != "all" {
 		s.MatchMode = "any"
+	}
+	s.PrincipalFallbackMode = strings.ToLower(strings.TrimSpace(s.PrincipalFallbackMode))
+	switch s.PrincipalFallbackMode {
+	case "", "client_key_hash":
+		s.PrincipalFallbackMode = "client_key_hash"
+	case "user_agent_plus_session":
+	case "disabled":
+	default:
+		s.PrincipalFallbackMode = "client_key_hash"
 	}
 	s.HMACSecretSource = strings.ToLower(strings.TrimSpace(s.HMACSecretSource))
 	if s.HMACSecretSource == "" {
@@ -140,6 +154,12 @@ func normalizeSettings(s PluginSettings) PluginSettings {
 	if s.ExecutorProvider == "" {
 		s.ExecutorProvider = defaultExecutorProvider
 	}
+	if !s.AllowExplicitClientIdentityHeaders {
+		s.AllowExplicitClientIdentityHeaders = false
+	} else {
+		s.AllowExplicitClientIdentityHeaders = true
+	}
+	s.DebugLogging = s.DebugLogging
 	return s
 }
 
@@ -353,6 +373,9 @@ func findPluginConfig(root map[string]any) (map[string]any, bool) {
 		"priority",
 		"auto_discover",
 		"include_native_antigravity",
+		"allow_explicit_client_identity_headers",
+		"principal_fallback_mode",
+		"debug_logging",
 		"match_mode",
 		"match_name",
 		"match_url",
@@ -390,6 +413,15 @@ func settingsFromMap(base PluginSettings, raw map[string]any) PluginSettings {
 	}
 	if value, ok := boolValue(raw, "include_native_antigravity", "include-native-antigravity"); ok {
 		base.IncludeNativeAntigravity = value
+	}
+	if value, ok := boolValue(raw, "allow_explicit_client_identity_headers", "allow-explicit-client-identity-headers"); ok {
+		base.AllowExplicitClientIdentityHeaders = value
+	}
+	if value, ok := stringValue(raw, "principal_fallback_mode", "principal-fallback-mode"); ok {
+		base.PrincipalFallbackMode = value
+	}
+	if value, ok := boolValue(raw, "debug_logging", "debug-logging"); ok {
+		base.DebugLogging = value
 	}
 	if value, ok := stringValue(raw, "match_mode", "match-mode"); ok {
 		base.MatchMode = value

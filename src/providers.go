@@ -367,13 +367,18 @@ func hmacSecretForCandidate(settings PluginSettings, candidate providerCandidate
 	return ""
 }
 
-func recordIntercept(candidate providerCandidate) {
+func recordIntercept(candidate providerCandidate, identity clientIdentityContext) {
 	interceptState.Lock()
 	interceptState.count++
 	interceptState.lastAt = time.Now().UTC()
 	interceptState.lastName = displayProviderName(candidate.Name, candidate.ProviderKey, candidate.ToFormat)
 	interceptState.Unlock()
-	recordDashboardEvent("info", "Client request intercepted for the mirrored provider")
+	recordDashboardEvent("info", fmt.Sprintf(
+		"Injected identity for %s on %s principal %s",
+		normalizeClientApp(identity.ClientApp, ""),
+		displayProviderName(candidate.Name, candidate.ProviderKey, candidate.ToFormat),
+		redactedIdentityLabel(identity.Principal),
+	))
 }
 
 func scanProviderDiagnostics() providerDiagnostics {

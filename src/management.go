@@ -111,29 +111,32 @@ func managementSettings() map[string]any {
 	snapshot := currentConfigSnapshot()
 	settings := normalizeSettings(snapshot.Settings)
 	return map[string]any{
-		"version":                            pluginVersion,
-		"enabled":                            settings.Enabled,
-		"priority":                           settings.Priority,
-		"auto_discover":                      settings.AutoDiscover,
-		"include_native_antigravity":         settings.IncludeNativeAntigravity,
-		"match_mode":                         settings.MatchMode,
-		"match_name":                         settings.MatchName,
-		"match_url":                          redactURL(settings.MatchURL),
-		"match_api_key_configured":           settings.MatchAPIKey != "",
-		"match_provider":                     settings.MatchProvider,
-		"match_providers":                    settings.MatchProviders,
-		"match_model":                        settings.MatchModel,
-		"match_models":                       settings.MatchModels,
-		"configured_selector_count":          settings.configuredSelectorCount(),
-		"hmac_secret_configured":             settings.hmacSecret() != "",
-		"hmac_secret_source":                 settings.hmacSecretSource(),
-		"agy2api_identity_secret_configured": settings.Agy2apiIdentitySecret != "",
-		"config_path_found":                  snapshot.ConfigPathFound,
-		"plugin_config_found":                snapshot.PluginConfigFound,
-		"executor_enabled":                   settings.ExecutorEnabled,
-		"executor_provider":                  settings.ExecutorProvider,
-		"executor_auth_ensured":              executorAuthRecordEnsured(),
-		"model_namespace":                    settings.ModelNamespace,
+		"version":                                pluginVersion,
+		"enabled":                                settings.Enabled,
+		"priority":                               settings.Priority,
+		"auto_discover":                          settings.AutoDiscover,
+		"include_native_antigravity":             settings.IncludeNativeAntigravity,
+		"allow_explicit_client_identity_headers": settings.AllowExplicitClientIdentityHeaders,
+		"principal_fallback_mode":                settings.PrincipalFallbackMode,
+		"debug_logging":                          settings.DebugLogging,
+		"match_mode":                             settings.MatchMode,
+		"match_name":                             settings.MatchName,
+		"match_url":                              redactURL(settings.MatchURL),
+		"match_api_key_configured":               settings.MatchAPIKey != "",
+		"match_provider":                         settings.MatchProvider,
+		"match_providers":                        settings.MatchProviders,
+		"match_model":                            settings.MatchModel,
+		"match_models":                           settings.MatchModels,
+		"configured_selector_count":              settings.configuredSelectorCount(),
+		"hmac_secret_configured":                 settings.hmacSecret() != "",
+		"hmac_secret_source":                     settings.hmacSecretSource(),
+		"agy2api_identity_secret_configured":     settings.Agy2apiIdentitySecret != "",
+		"config_path_found":                      snapshot.ConfigPathFound,
+		"plugin_config_found":                    snapshot.PluginConfigFound,
+		"executor_enabled":                       settings.ExecutorEnabled,
+		"executor_provider":                      settings.ExecutorProvider,
+		"executor_auth_ensured":                  executorAuthRecordEnsured(),
+		"model_namespace":                        settings.ModelNamespace,
 	}
 }
 
@@ -388,31 +391,37 @@ type providerEditorData struct {
 }
 
 type providerEditorView struct {
-	Name                 string             `json:"name"`
-	Prefix               string             `json:"prefix"`
-	BaseURL              string             `json:"base_url"`
-	Priority             int                `json:"priority"`
-	Disabled             bool               `json:"disabled"`
-	DisableCooling       bool               `json:"disable_cooling"`
-	APIKeyConfigured     bool               `json:"api_key_configured"`
-	APIKeyCount          int                `json:"api_key_count"`
-	Headers              []editorHeaderPair `json:"headers"`
-	ModelIDs             []string           `json:"model_ids"`
-	PublishedModelIDs    []string           `json:"published_model_ids"`
-	OriginalName         string             `json:"original_name"`
-	OriginalPrefix       string             `json:"original_prefix"`
-	OriginalBaseURL      string             `json:"original_base_url"`
-	OriginalModelCount   int                `json:"original_model_count"`
-	ReplacementMode      string             `json:"replacement_mode"`
-	OriginalProviderLive bool               `json:"original_provider_live"`
+	Name                 string                `json:"name"`
+	Prefix               string                `json:"prefix"`
+	BaseURL              string                `json:"base_url"`
+	Priority             int                   `json:"priority"`
+	Disabled             bool                  `json:"disabled"`
+	DisableCooling       bool                  `json:"disable_cooling"`
+	APIKeyConfigured     bool                  `json:"api_key_configured"`
+	APIKeyCount          int                   `json:"api_key_count"`
+	Headers              []editorHeaderPair    `json:"headers"`
+	Models               []providerEditorModel `json:"models"`
+	ModelIDs             []string              `json:"model_ids"`
+	PublishedModelIDs    []string              `json:"published_model_ids"`
+	OriginalName         string                `json:"original_name"`
+	OriginalPrefix       string                `json:"original_prefix"`
+	OriginalBaseURL      string                `json:"original_base_url"`
+	OriginalModelCount   int                   `json:"original_model_count"`
+	ReplacementMode      string                `json:"replacement_mode"`
+	OriginalProviderLive bool                  `json:"original_provider_live"`
 }
 
 type pluginEditorView struct {
-	ExecutorEnabled          bool   `json:"executor_enabled"`
-	ExecutorProvider         string `json:"executor_provider"`
-	ModelNamespace           string `json:"model_namespace"`
-	HMACSecretSource         string `json:"hmac_secret_source"`
-	Agy2apiIdentitySecretSet bool   `json:"agy2api_identity_secret_set"`
+	Enabled                            bool   `json:"enabled"`
+	AllowExplicitClientIdentityHeaders bool   `json:"allow_explicit_client_identity_headers"`
+	PrincipalFallbackMode              string `json:"principal_fallback_mode"`
+	DebugLogging                       bool   `json:"debug_logging"`
+	ExecutorEnabled                    bool   `json:"executor_enabled"`
+	ExecutorProvider                   string `json:"executor_provider"`
+	ModelNamespace                     string `json:"model_namespace"`
+	HMACSecretConfigured               bool   `json:"hmac_secret_configured"`
+	HMACSecretSource                   string `json:"hmac_secret_source"`
+	Agy2apiIdentitySecretConfigured    bool   `json:"agy2api_identity_secret_configured"`
 }
 
 type editorHeaderPair struct {
@@ -420,24 +429,46 @@ type editorHeaderPair struct {
 	Value string `json:"value"`
 }
 
+type providerEditorModel struct {
+	Name             string   `json:"name"`
+	Alias            string   `json:"alias,omitempty"`
+	Image            bool     `json:"image,omitempty"`
+	ThinkingDisabled bool     `json:"thinking_disabled,omitempty"`
+	ThinkingLevels   []string `json:"thinking_levels,omitempty"`
+	InputModalities  []string `json:"input_modalities,omitempty"`
+	OutputModalities []string `json:"output_modalities,omitempty"`
+}
+
 type providerEditorPayload struct {
-	OriginalName          string             `json:"original_name"`
-	OriginalPrefix        string             `json:"original_prefix"`
-	OriginalBaseURL       string             `json:"original_base_url"`
-	Name                  string             `json:"name"`
-	Prefix                string             `json:"prefix"`
-	BaseURL               string             `json:"base_url"`
-	Priority              int                `json:"priority"`
-	Disabled              bool               `json:"disabled"`
-	DisableCooling        bool               `json:"disable_cooling"`
-	APIKeys               []string           `json:"api_keys"`
-	Headers               []editorHeaderPair `json:"headers"`
-	ModelIDs              []string           `json:"model_ids"`
-	ExecutorEnabled       bool               `json:"executor_enabled"`
-	ExecutorProvider      string             `json:"executor_provider"`
-	ModelNamespace        string             `json:"model_namespace"`
-	Agy2apiIdentitySecret string             `json:"agy2api_identity_secret"`
-	HMACSecretSource      string             `json:"hmac_secret_source"`
+	OriginalName                       string                    `json:"original_name"`
+	OriginalPrefix                     string                    `json:"original_prefix"`
+	OriginalBaseURL                    string                    `json:"original_base_url"`
+	Name                               string                    `json:"name"`
+	Prefix                             string                    `json:"prefix"`
+	BaseURL                            string                    `json:"base_url"`
+	Priority                           int                       `json:"priority"`
+	Disabled                           bool                      `json:"disabled"`
+	DisableCooling                     bool                      `json:"disable_cooling"`
+	APIKeys                            []string                  `json:"api_keys"`
+	APIKeyRows                         []providerEditorAPIKeyRow `json:"api_key_rows"`
+	Headers                            []editorHeaderPair        `json:"headers"`
+	Models                             []providerEditorModel     `json:"models"`
+	ModelIDs                           []string                  `json:"model_ids"`
+	Enabled                            bool                      `json:"enabled"`
+	AllowExplicitClientIdentityHeaders bool                      `json:"allow_explicit_client_identity_headers"`
+	PrincipalFallbackMode              string                    `json:"principal_fallback_mode"`
+	DebugLogging                       bool                      `json:"debug_logging"`
+	ExecutorEnabled                    bool                      `json:"executor_enabled"`
+	ExecutorProvider                   string                    `json:"executor_provider"`
+	ModelNamespace                     string                    `json:"model_namespace"`
+	HMACSecret                         string                    `json:"hmac_secret"`
+	Agy2apiIdentitySecret              string                    `json:"agy2api_identity_secret"`
+	HMACSecretSource                   string                    `json:"hmac_secret_source"`
+}
+
+type providerEditorAPIKeyRow struct {
+	Existing bool   `json:"existing"`
+	Value    string `json:"value"`
 }
 
 func currentProviderEditorData(diagnostics providerDiagnostics, exposeConfig bool) providerEditorData {
@@ -468,6 +499,7 @@ func currentProviderEditorDataFromSpec(diagnostics providerDiagnostics, spec pro
 		APIKeyConfigured:     spec.primaryAPIKey() != "",
 		APIKeyCount:          len(spec.APIKeys),
 		Headers:              editorHeaders(spec.Headers, exposeConfig),
+		Models:               editorModelsFromSpec(spec.Models),
 		ModelIDs:             modelIDsFromInfos(spec.modelInfos(settings.ModelNamespace)),
 		PublishedModelIDs:    diagnostics.PublishedModelIDs,
 		OriginalName:         spec.Name,
@@ -495,11 +527,16 @@ func currentProviderEditorDataFromSpec(diagnostics providerDiagnostics, spec pro
 func pluginEditorViewFromSettings(settings PluginSettings) pluginEditorView {
 	settings = normalizeSettings(settings)
 	return pluginEditorView{
-		ExecutorEnabled:          settings.ExecutorEnabled,
-		ExecutorProvider:         settings.ExecutorProvider,
-		ModelNamespace:           settings.ModelNamespace,
-		HMACSecretSource:         settings.HMACSecretSource,
-		Agy2apiIdentitySecretSet: settings.Agy2apiIdentitySecret != "",
+		Enabled:                            settings.Enabled,
+		AllowExplicitClientIdentityHeaders: settings.AllowExplicitClientIdentityHeaders,
+		PrincipalFallbackMode:              settings.PrincipalFallbackMode,
+		DebugLogging:                       settings.DebugLogging,
+		ExecutorEnabled:                    settings.ExecutorEnabled,
+		ExecutorProvider:                   settings.ExecutorProvider,
+		ModelNamespace:                     settings.ModelNamespace,
+		HMACSecretConfigured:               settings.hmacSecret() != "",
+		HMACSecretSource:                   settings.hmacSecretSource(),
+		Agy2apiIdentitySecretConfigured:    settings.Agy2apiIdentitySecret != "",
 	}
 }
 
@@ -540,6 +577,7 @@ func providerEditorHTML(data providerEditorData) string {
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;font-size:14px;line-height:1.45}button,input,textarea,select{font:inherit}
 .shell{min-height:100vh;display:grid;grid-template-columns:minmax(280px,1fr) minmax(360px,520px)}.content{padding:22px}.drawer{background:var(--panel);border-left:1px solid var(--line);box-shadow:-8px 0 22px #0000000f;min-height:100vh}.drawer-head{height:58px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px}.drawer-title{font-size:15px;font-weight:700}.drawer-body{padding:14px 16px 24px}.top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.title h1{font-size:20px;line-height:1.2;margin:0 0 4px;font-weight:700;letter-spacing:0}.muted{color:var(--ink-2);font-size:12.5px}.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-bottom:10px}.section-title{font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);margin-bottom:10px}.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metric{background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:10px}.metric span{display:block;color:var(--ink-3);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}.metric strong{display:block;margin-top:3px;font-weight:700;word-break:break-word}.pill{display:inline-flex;align-items:center;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);padding:4px 9px;font-size:12px;font-weight:700;color:var(--ink-2)}.pill.ok{background:var(--success-bg);border-color:#5eead4;color:var(--success)}.pill.warn{background:var(--warn-bg);border-color:#f6d365;color:var(--warn)}.pill.err{background:var(--error-bg);border-color:#f0a79d;color:var(--error)}
 .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.btn{border:1px solid var(--line-2);background:#fff;color:var(--ink);border-radius:6px;height:34px;padding:0 11px;font-weight:650;font-size:13px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.btn:hover{filter:brightness(.985)}.btn:disabled{opacity:.5;cursor:not-allowed}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field{margin-bottom:12px}.field label{display:block;font-size:12px;color:var(--ink-2);font-weight:650;margin-bottom:5px}.field input,.field textarea,.field select{width:100%%;border:1px solid var(--line-2);background:#fff;border-radius:6px;color:var(--ink);padding:8px 9px;outline:none}.field textarea{resize:vertical;min-height:74px;font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:12px}.toggle{display:flex;align-items:center;gap:9px;background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:9px;margin-bottom:8px}.toggle input{width:16px;height:16px}.toggle span{font-weight:650}.notice{background:var(--warn-bg);border:1px solid #f6d365;color:var(--warn);border-radius:6px;padding:10px;margin-bottom:10px}.result{display:none;white-space:pre-wrap;word-break:break-word;border-radius:6px;padding:10px;margin-top:10px;background:#22221f;color:#eceae5;font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:12px;max-height:230px;overflow:auto}.chips{display:flex;gap:7px;flex-wrap:wrap}.chip{background:var(--surface);border:1px solid var(--line-2);border-radius:999px;padding:5px 9px;font-size:12px;font-weight:650}.log{max-height:220px;overflow:auto;background:#22221f;color:#eceae5;border-radius:6px;padding:10px;font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:12px}.event{padding:3px 0}.danger{color:var(--error)}.hidden{display:none!important}
+.accordion{border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow);margin-top:10px;overflow:hidden}.accordion summary{cursor:pointer;list-style:none;padding:12px 14px;font-weight:700;color:var(--ink);display:flex;align-items:center;justify-content:space-between;gap:10px}.accordion summary::-webkit-details-marker{display:none}.accordion-body{padding:0 14px 14px}.rowlist{display:flex;flex-direction:column;gap:8px;margin-top:10px}.rowcard{border:1px solid var(--line);border-radius:8px;background:var(--inset);padding:10px}.rowgrid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto auto;gap:8px;align-items:end}.rowgrid.cols-3{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto}.rowgrid .field{margin-bottom:0}.mini-pill{display:inline-flex;align-items:center;min-width:22px;justify-content:center;padding:2px 6px;border-radius:999px;background:var(--surface);border:1px solid var(--line-2);font-size:11px;font-weight:700;color:var(--ink-2)}.muted.small{font-size:12px;color:var(--ink-2)}.model-think{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}.think-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.think-pill{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:#fff;font-size:12px}.think-pill input{width:16px;height:16px}
 @media(max-width:900px){.shell{grid-template-columns:1fr}.drawer{border-left:0;border-top:1px solid var(--line);min-height:auto}.grid{grid-template-columns:1fr}.content{padding:16px}.drawer-body{padding:14px}}
 </style>
 </head>
@@ -569,14 +607,45 @@ func providerEditorHTML(data providerEditorData) string {
 <div class="grid"><div class="field"><label for="priority">Priority</label><input id="priority" type="number"></div><div class="field"><label for="hmac_source">HMAC source</label><select id="hmac_source"><option value="env">env</option><option value="config">config</option><option value="provider_api_key">provider_api_key</option><option value="none">none</option></select></div></div>
 <label class="toggle"><input id="disabled" type="checkbox"><span>Disable original provider</span></label>
 <label class="toggle"><input id="disable_cooling" type="checkbox"><span>Disable cooling</span></label>
-<div class="field"><label for="api_keys">API keys</label><textarea id="api_keys" placeholder="Write-only. Leave empty to keep configured keys. Put one new key per line."></textarea></div>
-<div class="field"><label for="headers">Request headers</label><textarea id="headers" placeholder="Header-Name: value"></textarea></div>
-<div class="field"><label for="models">Custom models</label><textarea id="models" placeholder="One model ID per line"></textarea></div>
-<div class="section-title">Plugin executor</div>
-<label class="toggle"><input id="executor_enabled" type="checkbox"><span>Executor enabled</span></label>
-<div class="grid"><div class="field"><label for="executor_provider">Executor provider</label><input id="executor_provider" placeholder="ln.Antigravity"></div><div class="field"><label for="model_namespace">Model namespace override</label><input id="model_namespace" placeholder="Leave empty to keep provider prefix"></div></div>
+
+<details class="accordion" open>
+<summary>API key entries <span id="api-key-count" class="mini-pill"></span></summary>
+<div class="accordion-body">
+<div class="actions"><button class="btn" type="button" id="add-key">+ Add key entry</button><button class="btn" type="button" id="test-provider">Test all</button></div>
+<div id="api-key-rows" class="rowlist"></div>
+</div>
+</details>
+
+<details class="accordion" open>
+<summary>Request headers <span id="header-count" class="mini-pill"></span></summary>
+<div class="accordion-body">
+<div id="header-rows" class="rowlist"></div>
+<div class="actions"><button class="btn" type="button" id="add-header">+ Add header</button></div>
+</div>
+</details>
+
+<details class="accordion" open>
+<summary>Custom models <span id="model-count" class="mini-pill"></span></summary>
+<div class="accordion-body">
+<div class="actions"><button class="btn" type="button" id="fetch-models">Fetch from endpoint</button><button class="btn" type="button" id="add-model">+ Add model</button></div>
+<div id="model-rows" class="rowlist"></div>
+</div>
+</details>
+
+<details class="accordion" open>
+<summary>Identity bridge</summary>
+<div class="accordion-body">
+<label class="toggle"><input id="enabled" type="checkbox"><span>Enable plugin</span></label>
+<label class="toggle"><input id="allow_explicit_client_identity_headers" type="checkbox"><span>Allow explicit client identity headers</span></label>
+<div class="grid"><div class="field"><label for="principal_fallback_mode">Fallback mode</label><select id="principal_fallback_mode"><option value="client_key_hash">client_key_hash</option><option value="user_agent_plus_session">user_agent_plus_session</option><option value="disabled">disabled</option></select></div><div class="field"><label for="debug_logging">Debug logging</label><select id="debug_logging"><option value="false">off</option><option value="true">on</option></select></div></div>
+<div class="field"><label for="hmac_secret">HMAC secret</label><input id="hmac_secret" type="password" placeholder="Write-only. Leave empty to keep current secret."></div>
 <div class="field"><label for="agy_secret">agy2api identity secret</label><input id="agy_secret" type="password" placeholder="Write-only. Leave empty to keep current secret."></div>
-<div class="actions"><button class="btn" type="button" id="fetch-models">Fetch from endpoint</button><button class="btn" type="button" id="test-provider">Test all</button><button class="btn primary" type="submit" id="save-provider">Save</button></div>
+<div class="grid"><div class="field"><label for="executor_enabled">Executor enabled</label><select id="executor_enabled"><option value="false">off</option><option value="true">on</option></select></div><div class="field"><label for="executor_provider">Executor provider</label><input id="executor_provider" placeholder="ln.Antigravity"></div></div>
+<div class="field"><label for="model_namespace">Model namespace override</label><input id="model_namespace" placeholder="Leave empty to keep provider prefix"></div>
+</div>
+</details>
+
+<div class="actions"><button class="btn primary" type="submit" id="save-provider">Save</button></div>
 <div id="result" class="result"></div>
 </form>
 </div>
@@ -586,21 +655,76 @@ func providerEditorHTML(data providerEditorData) string {
 <script>
 let state = JSON.parse(document.getElementById('seed').textContent);
 const MGT = '/v0/management/plugins/%s';
-const ids = ['original_name','original_prefix','original_base_url','name','prefix','base_url','priority','disabled','disable_cooling','api_keys','headers','models','executor_enabled','executor_provider','model_namespace','agy_secret','hmac_source'];
+const ids = ['original_name','original_prefix','original_base_url','name','prefix','base_url','priority','disabled','disable_cooling','enabled','allow_explicit_client_identity_headers','principal_fallback_mode','debug_logging','api-key-rows','header-rows','model-rows','executor_enabled','executor_provider','model_namespace','agy_secret','hmac_secret','hmac_source'];
 function el(id){return document.getElementById(id)}
 function managementKey(){return el('mkey').value.trim() || sessionStorage.getItem('agyBridgeManagementKey') || ''}
 function mgmtHeaders(json){const key=managementKey(); const h={}; if(json) h['Content-Type']='application/json'; if(key){h['X-Management-Key']=key; h['Authorization']='Bearer '+key} return h}
 function show(value){const out=el('result'); out.style.display='block'; out.textContent=typeof value==='string'?value:JSON.stringify(value,null,2)}
-function render(data){state=data; const p=data.provider||{}; const pl=data.plugin||{}; el('original_name').value=p.original_name||p.name||''; el('original_prefix').value=p.original_prefix||p.prefix||''; el('original_base_url').value=p.original_base_url||p.base_url||''; el('name').value=p.name||''; el('prefix').value=p.prefix||''; el('base_url').value=p.base_url||''; el('priority').value=p.priority||0; el('disabled').checked=!!p.disabled; el('disable_cooling').checked=!!p.disable_cooling; el('api_keys').value=''; el('api_keys').placeholder=p.api_key_configured?'Write-only. '+p.api_key_count+' key(s) configured; leave empty to keep them.':'Write-only. Put one key per line.'; el('headers').value=(p.headers||[]).map(x=>x.key+': '+x.value).join('\n'); el('models').value=(p.model_ids||[]).join('\n'); el('executor_enabled').checked=!!pl.executor_enabled; el('executor_provider').value=pl.executor_provider||'ln.Antigravity'; el('model_namespace').value=pl.model_namespace||''; el('agy_secret').value=''; el('agy_secret').placeholder=pl.agy2api_identity_secret_set?'Write-only. Secret configured; leave empty to keep it.':'Write-only. Paste shared agy2api secret.'; el('hmac_source').value=pl.hmac_secret_source||'env'; el('metric-mode').textContent=p.replacement_mode||'unknown'; el('metric-published').textContent=(p.published_model_ids||[]).length; el('metric-original').textContent=p.original_provider_live?'enabled':'disabled'; el('metric-auth').textContent=(data.diagnostics&&data.diagnostics.executor_auth_ensured)?'ready':'not ready'; const pill=el('mode-pill'); pill.textContent=p.replacement_mode||'unknown'; pill.className='pill '+(p.replacement_mode==='active'?'ok':p.replacement_mode==='withheld'?'warn':''); renderChips('live-models',p.published_model_ids||[],'No plugin-published models right now.'); renderLog(data.diagnostics&&data.diagnostics.recent_events||[]); for(const id of ids){ const node=el(id); if(node) node.disabled=!!data.locked; } ['fetch-models','test-provider','save-provider'].forEach(id=>{const node=el(id); if(node) node.disabled=!!data.locked}); }
+function esc(value){return String(value ?? '').replace(/[&<>"']/g, ch=>{switch(ch){case '&': return '&amp;'; case '<': return '&lt;'; case '>': return '&gt;'; case '"': return '&quot;'; default: return '&#39;';}})}
+function setLocked(node, locked){ if(!node) return; if('disabled' in node){ node.disabled = locked; } node.querySelectorAll('input,select,textarea,button').forEach(child=>{ child.disabled = locked; }); }
+function render(data){state=data; const p=data.provider||{}; const pl=data.plugin||{}; el('original_name').value=p.original_name||p.name||''; el('original_prefix').value=p.original_prefix||p.prefix||''; el('original_base_url').value=p.original_base_url||p.base_url||''; el('name').value=p.name||''; el('prefix').value=p.prefix||''; el('base_url').value=p.base_url||''; el('priority').value=p.priority||0; el('disabled').checked=!!p.disabled; el('disable_cooling').checked=!!p.disable_cooling; el('enabled').checked=pl.enabled !== false; el('allow_explicit_client_identity_headers').checked=pl.allow_explicit_client_identity_headers !== false; el('principal_fallback_mode').value=pl.principal_fallback_mode||'client_key_hash'; el('debug_logging').value=pl.debug_logging ? 'true' : 'false'; el('api-key-count').textContent=(p.api_key_count||0).toString(); el('header-count').textContent=(p.headers||[]).length.toString(); el('model-count').textContent=(p.models||[]).length.toString(); renderKeyRows(p.api_key_count||0); renderHeaderRows(p.headers||[]); renderModelRows(p.models||[]); el('executor_enabled').value=pl.executor_enabled ? 'true' : 'false'; el('executor_provider').value=pl.executor_provider||'ln.Antigravity'; el('model_namespace').value=pl.model_namespace||''; el('hmac_secret').value=''; el('hmac_secret').placeholder=pl.hmac_secret_configured?'Write-only. Secret configured; leave empty to keep it.':'Write-only. Paste shared HMAC secret.'; el('agy_secret').value=''; el('agy_secret').placeholder=pl.agy2api_identity_secret_configured?'Write-only. Secret configured; leave empty to keep it.':'Write-only. Paste shared agy2api secret.'; el('hmac_source').value=pl.hmac_secret_source||'env'; el('metric-mode').textContent=p.replacement_mode||'unknown'; el('metric-published').textContent=(p.published_model_ids||[]).length; el('metric-original').textContent=p.original_provider_live?'enabled':'disabled'; el('metric-auth').textContent=(data.diagnostics&&data.diagnostics.executor_auth_ensured)?'ready':'not ready'; const pill=el('mode-pill'); pill.textContent=p.replacement_mode||'unknown'; pill.className='pill '+(p.replacement_mode==='active'?'ok':p.replacement_mode==='withheld'?'warn':''); renderChips('live-models',p.published_model_ids||[],'No plugin-published models right now.'); renderLog(data.diagnostics&&data.diagnostics.recent_events||[]); for(const id of ids){ setLocked(el(id), !!data.locked); } ['fetch-models','test-provider','save-provider','add-key','add-header','add-model'].forEach(id=>{const node=el(id); if(node) node.disabled=!!data.locked}); }
 function renderChips(id,values,empty){const box=el(id); box.innerHTML=''; if(!values.length){box.innerHTML='<span class="muted">'+empty+'</span>'; return} values.forEach(v=>{const s=document.createElement('span'); s.className='chip'; s.textContent=v; box.appendChild(s)})}
 function renderLog(events){const box=el('runtime-log'); if(!events.length){box.textContent='No runtime events since the plugin loaded.'; return} box.innerHTML=''; events.forEach(ev=>{const d=document.createElement('div'); d.className='event'; d.textContent=(ev.at||'')+'  '+(ev.level||'info').toUpperCase()+'  '+(ev.message||''); box.appendChild(d)})}
-function lines(id){return el(id).value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)}
-function headers(){return lines('headers').map(line=>{const i=line.indexOf(':'); return i>0?{key:line.slice(0,i).trim(),value:line.slice(i+1).trim()}:null}).filter(Boolean)}
-function payload(){return {original_name:el('original_name').value,original_prefix:el('original_prefix').value,original_base_url:el('original_base_url').value,name:el('name').value.trim(),prefix:el('prefix').value.trim(),base_url:el('base_url').value.trim(),priority:Number(el('priority').value||0),disabled:el('disabled').checked,disable_cooling:el('disable_cooling').checked,api_keys:lines('api_keys'),headers:headers(),model_ids:lines('models'),executor_enabled:el('executor_enabled').checked,executor_provider:el('executor_provider').value.trim(),model_namespace:el('model_namespace').value.trim(),agy2api_identity_secret:el('agy_secret').value,hmac_secret_source:el('hmac_source').value}}
+function rowHtml(type, row, index){
+	if(type==='key'){
+		return '<div class="rowcard key-row" data-row="key" data-existing="'+((row && row.existing) ? 'true' : 'false')+'"><div class="rowgrid cols-3"><div class="field"><label>Key #'+(index+1)+'</label><input class="api-key-value" type="password" autocomplete="new-password" placeholder="'+((row && row.existing) ? 'Write-only. Leave empty to keep this key.' : 'Write-only. Enter a new key.')+'"></div><div class="muted small">Configured keys stay hidden.</div><div class="actions"><button class="btn row-remove" type="button">×</button></div></div></div>';
+	}
+	if(type==='header'){
+		return '<div class="rowcard header-row" data-row="header"><div class="rowgrid cols-3"><div class="field"><label>Header</label><input class="header-key" placeholder="X-Custom-Header"></div><div class="field"><label>Value</label><input class="header-value" placeholder="value"></div><div class="actions"><button class="btn row-remove" type="button">×</button></div></div></div>';
+	}
+	const levels=['none','minimal','low','medium','high','xhigh','max','auto'];
+	const think = row && row.thinking_levels && row.thinking_levels.length ? row.thinking_levels : [];
+	const noneChecked = row && row.thinking_disabled || think.length === 0;
+	let thinkHtml = '<div class="think-grid">';
+	for(const level of levels){
+		const checked = level === 'none' ? noneChecked : think.includes(level);
+		thinkHtml += '<label class="think-pill"><span>'+(level==='none'?'Disable thinking':level.charAt(0).toUpperCase()+level.slice(1))+'</span><input type="checkbox" class="model-think-level" data-level="'+level+'"'+(checked?' checked':'')+'></label>';
+	}
+	thinkHtml += '</div>';
+	return '<div class="rowcard model-row" data-row="model"><div class="rowgrid cols-3"><div class="field"><label>Model</label><input class="model-name" placeholder="gemini-3.7-flash-high" value="'+esc(row && row.name)+'"></div><div class="field"><label>Alias</label><input class="model-alias" placeholder="alias (optional)" value="'+esc(row && row.alias)+'"></div><div class="actions"><button class="btn row-remove" type="button">×</button></div></div><label class="toggle"><input class="model-image" type="checkbox"'+((row&&row.image)?' checked':'')+'><span>Allow image endpoints</span></label><div class="model-think">'+thinkHtml+'</div></div>';
+}
+function renderRows(containerId, type, rows, fallbackCount){
+	const box = el(containerId);
+	box.innerHTML = '';
+	const items = rows && rows.length ? rows : [];
+	if(type==='key' && items.length === 0 && fallbackCount > 0){
+		for(let i=0;i<fallbackCount;i++){ items.push({existing:true}); }
+	}
+	if(items.length === 0){
+		box.innerHTML = '';
+		if(type === 'header' || type === 'model'){
+			box.innerHTML = '<div class="muted small">No entries yet.</div>';
+		}
+	}
+	items.forEach((row, index) => {
+		const wrap = document.createElement('div');
+		wrap.innerHTML = rowHtml(type, row || {}, index);
+		const node = wrap.firstElementChild;
+		const remove = node.querySelector('.row-remove');
+		if(remove){ remove.onclick = ()=>{ node.remove(); updateCounts(); }; }
+		if(type==='model'){
+			node.querySelectorAll('.model-think-level').forEach(cb=>{
+				cb.onchange = ()=>{ if(cb.dataset.level === 'none' && cb.checked){ node.querySelectorAll('.model-think-level').forEach(other=>{ if(other !== cb && other.dataset.level !== 'none'){ other.checked = false; } }); } else if(cb.dataset.level !== 'none' && cb.checked){ const none = node.querySelector('.model-think-level[data-level="none"]'); if(none) none.checked = false; } updateCounts(); };
+			});
+		}
+		box.appendChild(node);
+	});
+}
+function renderKeyRows(count){ renderRows('api-key-rows','key',Array.from({length:count>0?count:1},()=>({existing:true})),0); updateCounts(); }
+function renderHeaderRows(rows){ renderRows('header-rows','header',rows,0); updateCounts(); }
+function renderModelRows(rows){ renderRows('model-rows','model',rows,0); updateCounts(); }
+function updateCounts(){ el('api-key-count').textContent = el('api-key-rows').querySelectorAll('.rowcard').length.toString(); el('header-count').textContent = el('header-rows').querySelectorAll('.rowcard').length.toString(); el('model-count').textContent = el('model-rows').querySelectorAll('.rowcard').length.toString(); }
+function collectKeyRows(){ return Array.from(el('api-key-rows').querySelectorAll('.rowcard')).map(node=>({existing:node.dataset.existing==='true',value:node.querySelector('.api-key-value').value.trim()})); }
+function collectHeaders(){ return Array.from(el('header-rows').querySelectorAll('.rowcard')).map(node=>({key:node.querySelector('.header-key').value.trim(),value:node.querySelector('.header-value').value.trim()})).filter(item=>item.key && item.value); }
+function collectModels(){ return Array.from(el('model-rows').querySelectorAll('.rowcard')).map(node=>{ const levels = Array.from(node.querySelectorAll('.model-think-level')).filter(cb=>cb.checked).map(cb=>cb.dataset.level).filter(level=>level !== 'none'); const none = node.querySelector('.model-think-level[data-level="none"]'); return {name:node.querySelector('.model-name').value.trim(),alias:node.querySelector('.model-alias').value.trim(),image:node.querySelector('.model-image').checked,thinking_disabled:!!(none && none.checked),thinking_levels:levels}; }).filter(item=>item.name || item.alias); }
+function payload(){const keyRows=collectKeyRows(); return {original_name:el('original_name').value,original_prefix:el('original_prefix').value,original_base_url:el('original_base_url').value,name:el('name').value.trim(),prefix:el('prefix').value.trim(),base_url:el('base_url').value.trim(),priority:Number(el('priority').value||0),disabled:el('disabled').checked,disable_cooling:el('disable_cooling').checked,api_keys:keyRows.filter(row=>!row.existing).map(row=>row.value).filter(Boolean),api_key_rows:keyRows,headers:collectHeaders(),models:collectModels(),enabled:el('enabled').checked,allow_explicit_client_identity_headers:el('allow_explicit_client_identity_headers').checked,principal_fallback_mode:el('principal_fallback_mode').value,debug_logging:el('debug_logging').value==='true',executor_enabled:el('executor_enabled').value==='true',executor_provider:el('executor_provider').value.trim(),model_namespace:el('model_namespace').value.trim(),hmac_secret:el('hmac_secret').value,agy2api_identity_secret:el('agy_secret').value,hmac_secret_source:el('hmac_source').value}}
 async function call(path,body){const res=await fetch(MGT+path,{method:body?'POST':'GET',headers:mgmtHeaders(!!body),body:body?JSON.stringify(body):undefined}); const text=await res.text(); let data; try{data=JSON.parse(text)}catch{data=text} if(!res.ok) throw new Error(typeof data==='string'?data:JSON.stringify(data)); return data}
 el('load-secure').onclick=async()=>{try{if(el('mkey').value.trim()) sessionStorage.setItem('agyBridgeManagementKey',el('mkey').value.trim()); const data=await call('/provider/config'); render(data); show('Secure config loaded.')}catch(e){show('Could not load secure config: '+e.message)}}
 el('clear-key').onclick=()=>{sessionStorage.removeItem('agyBridgeManagementKey'); el('mkey').value=''; show('Management key cleared from this browser session.')}
-el('fetch-models').onclick=async()=>{if(state.locked){show('Load secure config first.'); return} try{const data=await call('/provider/fetch-models',payload()); if(data.models) el('models').value=data.models.join('\n'); show(data)}catch(e){show('Fetch failed: '+e.message)}}
+el('add-key').onclick=()=>{if(state.locked){show('Load secure config first.'); return} const box=el('api-key-rows'); const wrap=document.createElement('div'); wrap.innerHTML=rowHtml('key',{existing:false},box.children.length); const node=wrap.firstElementChild; node.querySelector('.row-remove').onclick=()=>{node.remove(); updateCounts();}; box.appendChild(node); updateCounts(); node.querySelector('.api-key-value').focus();}
+el('add-header').onclick=()=>{if(state.locked){show('Load secure config first.'); return} const box=el('header-rows'); const wrap=document.createElement('div'); wrap.innerHTML=rowHtml('header',{},box.children.length); const node=wrap.firstElementChild; node.querySelector('.row-remove').onclick=()=>{node.remove(); updateCounts();}; box.appendChild(node); updateCounts(); node.querySelector('.header-key').focus();}
+el('add-model').onclick=()=>{if(state.locked){show('Load secure config first.'); return} const box=el('model-rows'); const wrap=document.createElement('div'); wrap.innerHTML=rowHtml('model',{name:'',alias:'',thinking_levels:['low','medium','high']},box.children.length); const node=wrap.firstElementChild; node.querySelector('.row-remove').onclick=()=>{node.remove(); updateCounts();}; node.querySelectorAll('.model-think-level').forEach(cb=>{cb.onchange=()=>{ if(cb.dataset.level === 'none' && cb.checked){ node.querySelectorAll('.model-think-level').forEach(other=>{ if(other !== cb && other.dataset.level !== 'none'){ other.checked = false; } }); } else if(cb.dataset.level !== 'none' && cb.checked){ const none = node.querySelector('.model-think-level[data-level="none"]'); if(none) none.checked = false; } updateCounts(); }; }); box.appendChild(node); updateCounts(); node.querySelector('.model-name').focus();}
+el('fetch-models').onclick=async()=>{if(state.locked){show('Load secure config first.'); return} try{const data=await call('/provider/fetch-models',payload()); if(data.models){ renderModelRows((data.models||[]).map(id=>({name:id,thinking_levels:['low','medium','high']}))); } show(data)}catch(e){show('Fetch failed: '+e.message)}}
 el('test-provider').onclick=async()=>{if(state.locked){show('Load secure config first.'); return} try{show(await call('/provider/test',payload()))}catch(e){show('Test failed: '+e.message)}}
 el('editor-form').onsubmit=async(ev)=>{ev.preventDefault(); if(state.locked){show('Load secure config first.'); return} try{const data=await call('/provider/save',payload()); show(data); if(data.editor) render(data.editor)}catch(e){show('Save failed: '+e.message)}}
 render(state);
@@ -726,10 +850,24 @@ func parseProviderEditorPayload(raw []byte) (providerEditorPayload, error) {
 	payload.OriginalBaseURL = strings.TrimRight(strings.TrimSpace(payload.OriginalBaseURL), "/")
 	payload.ExecutorProvider = normalizeProviderKey(payload.ExecutorProvider)
 	payload.ModelNamespace = strings.Trim(strings.TrimSpace(payload.ModelNamespace), "/")
+	payload.HMACSecret = strings.TrimSpace(payload.HMACSecret)
 	payload.Agy2apiIdentitySecret = strings.TrimSpace(payload.Agy2apiIdentitySecret)
 	payload.HMACSecretSource = strings.ToLower(strings.TrimSpace(payload.HMACSecretSource))
 	payload.APIKeys = uniqueStrings(payload.APIKeys)
+	for i := range payload.APIKeyRows {
+		payload.APIKeyRows[i].Value = strings.TrimSpace(payload.APIKeyRows[i].Value)
+	}
 	payload.ModelIDs = uniqueStrings(payload.ModelIDs)
+	if len(payload.Models) == 0 && len(payload.ModelIDs) > 0 {
+		payload.Models = editorModelsFromIDs(payload.ModelIDs)
+	}
+	for i := range payload.Models {
+		payload.Models[i].Name = strings.TrimSpace(payload.Models[i].Name)
+		payload.Models[i].Alias = strings.TrimSpace(payload.Models[i].Alias)
+		payload.Models[i].ThinkingLevels = uniqueStrings(payload.Models[i].ThinkingLevels)
+		payload.Models[i].InputModalities = uniqueStrings(payload.Models[i].InputModalities)
+		payload.Models[i].OutputModalities = uniqueStrings(payload.Models[i].OutputModalities)
+	}
 	headers := make([]editorHeaderPair, 0, len(payload.Headers))
 	for _, header := range payload.Headers {
 		header.Key = strings.TrimSpace(header.Key)
@@ -845,15 +983,35 @@ func patchProviderConfig(raw []byte, payload providerEditorPayload, settings Plu
 		}
 		setAny(provider, "headers", headers, &changed)
 	}
-	if len(payload.APIKeys) > 0 {
+	if len(payload.APIKeyRows) > 0 {
+		apiEntries := make([]any, 0, len(payload.APIKeyRows))
+		currentKeys := compatAPIKeys(provider)
+		for index, row := range payload.APIKeyRows {
+			value := strings.TrimSpace(row.Value)
+			if value == "" && row.Existing {
+				if index < len(currentKeys) {
+					value = currentKeys[index]
+				}
+			}
+			if value == "" {
+				continue
+			}
+			apiEntries = append(apiEntries, map[string]any{"api-key": value})
+		}
+		if len(apiEntries) > 0 {
+			setAny(provider, "api-key-entries", apiEntries, &changed)
+		}
+	} else if len(payload.APIKeys) > 0 {
 		apiEntries := make([]any, 0, len(payload.APIKeys))
 		for _, key := range payload.APIKeys {
 			apiEntries = append(apiEntries, map[string]any{"api-key": key})
 		}
 		setAny(provider, "api-key-entries", apiEntries, &changed)
 	}
-	if len(payload.ModelIDs) > 0 {
-		setAny(provider, "models", modelsForEditorPayload(payload.ModelIDs, compatModels(provider)), &changed)
+	if len(payload.Models) > 0 {
+		setAny(provider, "models", modelsForEditorPayload(payload.Models, compatModels(provider)), &changed)
+	} else if len(payload.ModelIDs) > 0 {
+		setAny(provider, "models", modelsForEditorPayload(editorModelsFromIDs(payload.ModelIDs), compatModels(provider)), &changed)
 	}
 	if errUpdate := replaceOpenAICompatEntry(root, index, provider); errUpdate != nil {
 		return nil, nil, errUpdate
@@ -862,9 +1020,16 @@ func patchProviderConfig(raw []byte, payload providerEditorPayload, settings Plu
 	if payload.ExecutorProvider == "" {
 		payload.ExecutorProvider = settings.ExecutorProvider
 	}
+	setBool(pluginConfig, "enabled", payload.Enabled, &changed)
+	setBool(pluginConfig, "allow_explicit_client_identity_headers", payload.AllowExplicitClientIdentityHeaders, &changed)
+	setString(pluginConfig, "principal_fallback_mode", payload.PrincipalFallbackMode, &changed)
+	setBool(pluginConfig, "debug_logging", payload.DebugLogging, &changed)
 	setBool(pluginConfig, "executor_enabled", payload.ExecutorEnabled, &changed)
 	setString(pluginConfig, "executor_provider", payload.ExecutorProvider, &changed)
 	setString(pluginConfig, "model_namespace", payload.ModelNamespace, &changed)
+	if payload.HMACSecret != "" {
+		setString(pluginConfig, "hmac_secret", payload.HMACSecret, &changed)
+	}
 	if payload.HMACSecretSource != "" {
 		setString(pluginConfig, "hmac_secret_source", payload.HMACSecretSource, &changed)
 	}
@@ -938,7 +1103,47 @@ func ensureMap(parent map[string]any, key string) map[string]any {
 	return child
 }
 
-func modelsForEditorPayload(ids []string, existing []modelSpec) []any {
+func editorModelsFromSpec(models []modelSpec) []providerEditorModel {
+	if len(models) == 0 {
+		return nil
+	}
+	out := make([]providerEditorModel, 0, len(models))
+	for _, model := range models {
+		out = append(out, providerEditorModel{
+			Name:             model.Name,
+			Alias:            model.Alias,
+			Image:            model.Image,
+			ThinkingLevels:   append([]string(nil), thinkingLevels(model.Thinking)...),
+			InputModalities:  append([]string(nil), model.InputModalities...),
+			OutputModalities: append([]string(nil), model.OutputModalities...),
+			ThinkingDisabled: model.Thinking != nil && len(model.Thinking.Levels) == 0,
+		})
+	}
+	return out
+}
+
+func editorModelsFromIDs(ids []string) []providerEditorModel {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]providerEditorModel, 0, len(ids))
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id == "" {
+			continue
+		}
+		out = append(out, providerEditorModel{Name: id})
+	}
+	return out
+}
+
+func thinkingLevels(spec *thinkingSpec) []string {
+	if spec == nil {
+		return nil
+	}
+	return append([]string(nil), spec.Levels...)
+}
+
+func modelsForEditorPayload(rows []providerEditorModel, existing []modelSpec) []any {
 	byID := make(map[string]modelSpec, len(existing)*2)
 	for _, model := range existing {
 		if model.Name != "" {
@@ -948,30 +1153,67 @@ func modelsForEditorPayload(ids []string, existing []modelSpec) []any {
 			byID[strings.ToLower(model.Alias)] = model
 		}
 	}
-	out := make([]any, 0, len(ids))
-	for _, id := range ids {
+	out := make([]any, 0, len(rows))
+	for _, row := range rows {
+		id := strings.TrimSpace(row.Name)
+		if id == "" {
+			id = strings.TrimSpace(row.Alias)
+		}
+		if id == "" {
+			continue
+		}
 		model, found := byID[strings.ToLower(id)]
 		if !found {
-			out = append(out, map[string]any{"name": id})
+			item := map[string]any{"name": id}
+			if row.Alias != "" {
+				item["alias"] = row.Alias
+			}
+			if row.Image {
+				item["image"] = true
+			}
+			if len(row.ThinkingLevels) > 0 || row.ThinkingDisabled {
+				item["thinking"] = map[string]any{
+					"levels": row.ThinkingLevels,
+				}
+			}
+			if len(row.InputModalities) > 0 {
+				item["input-modalities"] = row.InputModalities
+			}
+			if len(row.OutputModalities) > 0 {
+				item["output-modalities"] = row.OutputModalities
+			}
+			out = append(out, item)
 			continue
 		}
 		item := map[string]any{}
-		if model.Name != "" {
+		if row.Name != "" {
+			item["name"] = row.Name
+		} else if model.Name != "" {
 			item["name"] = model.Name
 		}
-		if model.Alias != "" {
+		if row.Alias != "" {
+			item["alias"] = row.Alias
+		} else if model.Alias != "" {
 			item["alias"] = model.Alias
 		}
-		if model.Image {
-			item["image"] = model.Image
+		if row.Image || model.Image {
+			item["image"] = row.Image || model.Image
 		}
-		if len(model.InputModalities) > 0 {
+		if len(row.InputModalities) > 0 {
+			item["input-modalities"] = row.InputModalities
+		} else if len(model.InputModalities) > 0 {
 			item["input-modalities"] = model.InputModalities
 		}
-		if len(model.OutputModalities) > 0 {
+		if len(row.OutputModalities) > 0 {
+			item["output-modalities"] = row.OutputModalities
+		} else if len(model.OutputModalities) > 0 {
 			item["output-modalities"] = model.OutputModalities
 		}
-		if model.Thinking != nil {
+		if len(row.ThinkingLevels) > 0 || row.ThinkingDisabled {
+			item["thinking"] = map[string]any{
+				"levels": row.ThinkingLevels,
+			}
+		} else if model.Thinking != nil {
 			item["thinking"] = map[string]any{
 				"min":             model.Thinking.Min,
 				"max":             model.Thinking.Max,

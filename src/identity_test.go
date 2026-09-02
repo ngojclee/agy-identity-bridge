@@ -78,6 +78,32 @@ func TestComputeHMAC(t *testing.T) {
 	}
 }
 
+func TestDeriveStablePrincipalUsesExplicitClientIdentity(t *testing.T) {
+	settings := PluginSettings{AllowExplicitClientIdentityHeaders: true}
+	payload := InterceptRequestPayload{
+		Headers: map[string][]string{
+			"X-AGY-Client-App":         {"codex"},
+			"X-AGY-Client-Instance":    {"instance-1"},
+			"X-AGY-Capability-Profile": {"pro"},
+			"X-AGY-Connector-Id":       {"connector-1"},
+			"User-Agent":               {"Codex/1.0"},
+		},
+	}
+	first := deriveClientIdentityFromIntercept(payload, settings)
+	second := deriveClientIdentityFromIntercept(payload, settings)
+	if first.Principal == "" || first.Principal != second.Principal {
+		t.Fatalf("principal not stable: %+v %+v", first, second)
+	}
+	payload.Headers["X-AGY-Client-Instance"] = []string{"instance-2"}
+	third := deriveClientIdentityFromIntercept(payload, settings)
+	if third.Principal == first.Principal {
+		t.Fatalf("principal did not change when client instance changed: %+v %+v", first, third)
+	}
+	if first.PrincipalSource != "explicit" {
+		t.Fatalf("principal source = %q, want explicit", first.PrincipalSource)
+	}
+}
+
 func TestPluginRegistration(t *testing.T) {
 	reg := pluginRegistration()
 	if !reg.Capabilities.RequestInterceptor {

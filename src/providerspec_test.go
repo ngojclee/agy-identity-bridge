@@ -425,6 +425,24 @@ func TestHMACSecretPriorityEnvBeatsProviderAPIKeyMode(t *testing.T) {
 	}
 }
 
+// Dedicated agy2api_identity_secret wins even if hmac_secret_source is set to
+// none, because the dedicated secret is the explicit override the operator
+// asked for.
+func TestHMACSecretPriorityDedicatedOverridesNone(t *testing.T) {
+	loadMirror(t)
+	settings := currentPluginSettings()
+	settings.Agy2apiIdentitySecret = "dedicated-secret"
+	settings.HMACSecret = "legacy-secret"
+	settings.HMACSecretSource = "none"
+	t.Setenv("AGY_PLUGIN_SECRET", "env-secret")
+	if got := settings.hmacSecret(); got != "dedicated-secret" {
+		t.Fatalf("secret = %q, want dedicated-secret", got)
+	}
+	if got := settings.hmacSecretSource(); got != "agy2api_identity_secret" {
+		t.Fatalf("secret source = %q, want agy2api_identity_secret", got)
+	}
+}
+
 // The diagnostics payload and status page must never contain the secret value.
 func TestDiagnosticsNeverLeaksAgy2apiSecret(t *testing.T) {
 	loadMirror(t)

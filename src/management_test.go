@@ -14,6 +14,11 @@ func TestProviderEditorHTMLHasManagementKeyGateAndProviderControls(t *testing.T)
 		"CPA management key",
 		"Load secure config",
 		"Disable original provider",
+		"Identity bridge",
+		"Allow explicit client identity headers",
+		"API key entries",
+		"Request headers",
+		"Custom models",
 		"Fetch from endpoint",
 		"Test all",
 		"Save",
@@ -124,9 +129,41 @@ func TestPatchProviderConfigUpdatesProviderAndPluginFields(t *testing.T) {
 	}
 	rawChanged, _ := json.Marshal(changed)
 	for _, field := range []string{"disabled", "api-key-entries", "agy2api_identity_secret"} {
-		if !strings.Contains(string(rawChanged), field) {
+	if !strings.Contains(string(rawChanged), field) {
 			t.Fatalf("changed fields missing %q: %s", field, rawChanged)
 		}
+	}
+}
+
+func TestPatchProviderConfigPreservesExistingApiKeysWhenBlankRowsStayBlank(t *testing.T) {
+	settings := decodePluginSettings([]byte(mirrorConfigYAML))
+	payload := providerEditorPayload{
+		OriginalName:     "Antigravity",
+		OriginalPrefix:   "agy",
+		OriginalBaseURL:  "http://10.21.4.101:8123/v1",
+		Name:             "Antigravity",
+		Prefix:           "agy",
+		BaseURL:          "http://10.21.4.101:8123/v1",
+		APIKeyRows: []providerEditorAPIKeyRow{
+			{Existing: true, Value: ""},
+			{Existing: false, Value: "new-provider-key"},
+		},
+	}
+	updated, _, errPatch := patchProviderConfig([]byte(mirrorConfigYAML), payload, settings)
+	if errPatch != nil {
+		t.Fatal(errPatch)
+	}
+	root, errParse := parseYAMLMap(updated)
+	if errParse != nil {
+		t.Fatal(errParse)
+	}
+	providers := openAICompatEntries(root)
+	if len(providers) == 0 {
+		t.Fatal("providers missing after patch")
+	}
+	keys := compatAPIKeys(providers[0])
+	if len(keys) != 2 || keys[0] != "provider-secret" || keys[1] != "new-provider-key" {
+		t.Fatalf("api keys = %+v", keys)
 	}
 }
 

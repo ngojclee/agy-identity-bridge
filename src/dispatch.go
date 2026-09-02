@@ -274,6 +274,22 @@ func pluginRegistration() registration {
 					Description: "Additional requested model selectors. Legacy match_model is also accepted.",
 				},
 				{
+					Name:        "allow_explicit_client_identity_headers",
+					Type:        pluginapi.ConfigFieldTypeBoolean,
+					Description: "Allow trusted client identity headers such as X-AGY-Client-App, X-AGY-Client-Instance, and X-AGY-Connector-Id to influence principal derivation. Default true.",
+				},
+				{
+					Name:        "principal_fallback_mode",
+					Type:        pluginapi.ConfigFieldTypeEnum,
+					EnumValues:  []string{"client_key_hash", "user_agent_plus_session", "disabled"},
+					Description: "Fallback strategy when explicit client identity headers are absent. Default client_key_hash.",
+				},
+				{
+					Name:        "debug_logging",
+					Type:        pluginapi.ConfigFieldTypeBoolean,
+					Description: "Emit safe metadata only to the dashboard event log. Secrets, tokens, and raw authorization values are never logged.",
+				},
+				{
 					Name:        "hmac_secret_source",
 					Type:        pluginapi.ConfigFieldTypeEnum,
 					EnumValues:  []string{"env", "config", "provider_api_key", "none"},
@@ -346,26 +362,30 @@ func handleInterceptAfter(request []byte) ([]byte, error) {
 	if !matched {
 		return okEnvelope(InterceptResponsePayload{}), nil
 	}
-	recordIntercept(candidate)
-
-	bearerToken := extractBearerToken(payload.Headers)
-	if bearerToken == "" {
+	identity := deriveClientIdentityFromIntercept(payload, settings)
+	if identity.Principal == "" {
+		recordDashboardEvent("warning", "Client request matched the mirrored provider but no stable identity could be derived")
 		return okEnvelope(InterceptResponsePayload{}), nil
 	}
+	identity.ProviderName = candidate.Name
+	recordIntercept(candidate, identity)
 
-	principalHash := derivePrincipal(bearerToken)
-	clientApp := extractClientApp(payload.Headers)
 	headers := map[string][]string{
-		"X-AGY-Principal": {principalHash},
+		"X-AGY-Principal":         {identity.Principal},
+		"X-AGY-Timestamp":         {identity.Timestamp},
+		"X-AGY-Client-App":        {identity.ClientApp},
+		"X-AGY-Plugin-Version":    {pluginVersion},
+		"X-AGY-CPA-Provider-Name": {candidate.Name},
 	}
-	if clientApp != "" {
-		headers["X-AGY-Client-App"] = []string{clientApp}
+	if identity.ClientInstance != "" {
+		headers["X-AGY-Client-Instance"] = []string{identity.ClientInstance}
 	}
-
-	if secret := hmacSecretForCandidate(settings, candidate); secret != "" {
-		headers["X-AGY-Signature"] = []string{computeHMAC(principalHash, secret)}
+	if identity.CapabilityProfile != "" {
+		headers["X-AGY-Capability-Profile"] = []string{identity.CapabilityProfile}
 	}
-
+	if identity.ConnectorID != "" {
+		headers["X-AGY-Connector-Id"] = []string{identity.ConnectorID}
+	}
 	return okEnvelope(InterceptResponsePayload{Headers: headers}), nil
 }
 
@@ -406,8 +426,7 @@ func extractClientApp(headers map[string][]string) string {
 }
 
 func derivePrincipal(bearerToken string) string {
-	hash := sha256.Sum256([]byte(bearerToken))
-	return hex.EncodeToString(hash[:])
+	return hashString(bearerToken)
 }
 
 func computeHMAC(principalHash string, secret string) string {

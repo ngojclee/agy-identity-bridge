@@ -170,39 +170,76 @@ type streamChunk struct {
 // reason this executor exists: CLIProxyAPI's own OpenAI-compatible executor
 // drops these headers before the request leaves the process.
 type clientIdentity struct {
-	Principal string
-	ClientApp string
-	Signature string
-	SessionID string
+	Principal         string
+	ClientApp         string
+	ClientInstance    string
+	CapabilityProfile string
+	ConnectorID       string
+	SessionID         string
+	Timestamp         string
+	ProviderName      string
 }
 
 func identityFromExecutorRequest(req executorRequest) clientIdentity {
-	identity := clientIdentity{
-		Principal: firstHeaderValue(req.Headers, "X-AGY-Principal", "X-AGY-Device"),
-		ClientApp: firstHeaderValue(req.Headers, "X-AGY-Client-App", "X-AGY-Device"),
-		Signature: firstHeaderValue(req.Headers, "X-AGY-Signature"),
-		SessionID: firstHeaderValue(req.Headers, "X-AGY-Session-ID", "X-Session-ID"),
+	context := clientIdentityContext{
+		Principal:         firstHeaderValue(req.Headers, "X-AGY-Principal"),
+		ClientApp:         firstHeaderValue(req.Headers, "X-AGY-Client-App", "X-AGY-Device"),
+		ClientInstance:    firstHeaderValue(req.Headers, "X-AGY-Client-Instance"),
+		CapabilityProfile: firstHeaderValue(req.Headers, "X-AGY-Capability-Profile"),
+		ConnectorID:       firstHeaderValue(req.Headers, "X-AGY-Connector-Id"),
+		SessionID:         firstHeaderValue(req.Headers, "X-AGY-Session-ID", "X-Session-ID"),
+		ProviderName:      firstHeaderValue(req.Headers, "X-AGY-CPA-Provider-Name", "X-AGY-Provider"),
+		Timestamp:         firstHeaderValue(req.Headers, "X-AGY-Timestamp"),
+		ExplicitIdentity:  true,
 	}
-	return identity
+	if context.ClientApp == "" {
+		context.ClientApp = normalizeClientApp("", firstHeaderValue(req.Headers, "User-Agent"))
+	}
+	if context.Timestamp == "" {
+		context.Timestamp = defaultTimestamp()
+	}
+	if context.Principal == "" {
+		context.Principal, context.PrincipalSource = deriveStablePrincipal(currentPluginSettings(), context, "", req.Headers)
+	}
+	return clientIdentity{
+		Principal:         context.Principal,
+		ClientApp:         context.ClientApp,
+		ClientInstance:    context.ClientInstance,
+		CapabilityProfile: context.CapabilityProfile,
+		ConnectorID:       context.ConnectorID,
+		SessionID:         context.SessionID,
+		Timestamp:         context.Timestamp,
+		ProviderName:      context.ProviderName,
+	}
 }
 
-func identityHeaders(identity clientIdentity, spec providerSpec, req executorRequest) map[string][]string {
+func identityHeaders(identity clientIdentity, spec providerSpec, req executorRequest, method, path string) map[string][]string {
 	headers := map[string][]string{}
 	setIf := func(key, value string) {
 		if strings.TrimSpace(value) != "" {
 			headers[key] = []string{value}
 		}
 	}
-	// Identity comes first in priority: a principal supplied by an upstream
-	// tool call wins, otherwise we derive one from the client key.
 	setIf("X-AGY-Principal", identity.Principal)
 	setIf("X-AGY-Client-App", identity.ClientApp)
-	setIf("X-AGY-Signature", identity.Signature)
+	setIf("X-AGY-Client-Instance", identity.ClientInstance)
+	setIf("X-AGY-Capability-Profile", identity.CapabilityProfile)
+	setIf("X-AGY-Connector-Id", identity.ConnectorID)
 	setIf("X-AGY-Session-ID", identity.SessionID)
+	setIf("X-AGY-Timestamp", identity.Timestamp)
+	setIf("X-AGY-Plugin-Version", pluginVersion)
+	setIf("X-AGY-CPA-Provider-Name", firstNonEmpty(identity.ProviderName, spec.Name))
 	setIf("X-AGY-Upstream-Model", req.Model)
 	setIf("X-AGY-Provider", spec.Name)
 	if secret := hmacSecretForCandidate(currentPluginSettings(), providerCandidate{APIKey: spec.primaryAPIKey()}); secret != "" && identity.Principal != "" {
-		headers["X-AGY-Signature"] = []string{computeHMAC(identity.Principal, secret)}
+		headers["X-AGY-Signature"] = []string{computeHMAC(identitySignatureMessage(clientIdentityContext{
+			Principal:         identity.Principal,
+			ClientApp:         identity.ClientApp,
+			ClientInstance:    identity.ClientInstance,
+			CapabilityProfile: identity.CapabilityProfile,
+			ConnectorID:       identity.ConnectorID,
+			Timestamp:         identity.Timestamp,
+		}, method, path), secret)}
 	}
 	return headers
 }
@@ -276,7 +313,7 @@ func buildUpstreamRequest(req executorRequest, spec providerSpec, identity clien
 		"Content-Type":  {"application/json"},
 		"User-Agent":    {"agy-identity-bridge-executor"},
 	}
-	for key, values := range identityHeaders(identity, spec, req) {
+	for key, values := range identityHeaders(identity, spec, req, "POST", endpoint) {
 		headers[key] = values
 	}
 	return hostHTTPRequest{

@@ -58,6 +58,9 @@ func TestParseExecutorRequestAcceptsCPAGoStyleKeys(t *testing.T) {
 
 func TestBuildUpstreamRequestAttachesIdentityHeaders(t *testing.T) {
 	loadMirror(t)
+	settings := currentPluginSettings()
+	settings.Agy2apiIdentitySecret = "signing-secret"
+	withSettings(t, settings)
 	root, errParse := parseYAMLMap([]byte(mirrorConfigYAML))
 	if errParse != nil {
 		t.Fatal(errParse)
@@ -93,6 +96,24 @@ func TestBuildUpstreamRequestAttachesIdentityHeaders(t *testing.T) {
 	}
 	if upstream.Headers["X-AGY-Client-App"][0] != "codex" {
 		t.Fatalf("client app missing: %+v", upstream.Headers)
+	}
+	if upstream.Headers["X-AGY-Timestamp"][0] == "" {
+		t.Fatalf("timestamp missing: %+v", upstream.Headers)
+	}
+	if upstream.Headers["X-AGY-Plugin-Version"][0] != pluginVersion {
+		t.Fatalf("plugin version missing: %+v", upstream.Headers)
+	}
+	if upstream.Headers["X-AGY-CPA-Provider-Name"][0] != spec.Name {
+		t.Fatalf("provider name missing: %+v", upstream.Headers)
+	}
+	expectedSig := computeHMAC(identitySignatureMessage(clientIdentityContext{
+		Principal:    identity.Principal,
+		ClientApp:    identity.ClientApp,
+		Timestamp:    upstream.Headers["X-AGY-Timestamp"][0],
+		ProviderName: spec.Name,
+	}, "POST", "/chat/completions"), hmacSecretForCandidate(currentPluginSettings(), providerCandidate{APIKey: spec.primaryAPIKey()}))
+	if upstream.Headers["X-AGY-Signature"][0] != expectedSig {
+		t.Fatalf("signature = %q, want %q", upstream.Headers["X-AGY-Signature"][0], expectedSig)
 	}
 	// The client's own bearer key must never be forwarded upstream.
 	for key, values := range upstream.Headers {
