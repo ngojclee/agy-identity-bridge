@@ -630,6 +630,21 @@ func providerEditorHTML(data providerEditorData) string {
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;font-size:14px;line-height:1.45;overflow-x:hidden}button,input,textarea,select{font:inherit}
 .shell{min-height:100vh;position:relative}.content{width:min(1180px,calc(100%% - 40px));margin:0 auto;padding:22px 0 30px}.drawer{position:fixed;top:0;right:0;bottom:0;width:min(780px,calc(100vw - 32px));background:var(--panel);border-left:1px solid var(--line);box-shadow:-8px 0 24px #00000016;transform:translateX(100%%);transition:transform .24s ease,box-shadow .24s ease;z-index:30;display:flex;flex-direction:column}.drawer-head{height:58px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px;flex:0 0 auto}.drawer-head-right{display:flex;align-items:center;gap:10px}.drawer-title{font-size:15px;font-weight:700}.drawer-body{padding:16px 18px 28px;overflow:auto;flex:1 1 auto}.drawer-rail{position:fixed;right:16px;bottom:16px;z-index:31}.drawer-rail button{border:1px solid var(--line-2);background:var(--panel);color:var(--ink);height:40px;padding:0 12px;border-radius:8px;box-shadow:var(--shadow);cursor:pointer;font-weight:700;letter-spacing:0}.drawer-rail button:hover{background:#fff}.drawer-open .drawer{transform:translateX(0)}.drawer-open .drawer-rail{display:none}.top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;padding-right:96px}.title h1{font-size:20px;line-height:1.2;margin:0 0 4px;font-weight:700;letter-spacing:0}.muted{color:var(--ink-2);font-size:12.5px}.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-bottom:12px}.section-title{font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);margin-bottom:10px}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.metric{background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:10px}.metric span{display:block;color:var(--ink-3);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;text-align:left}.metric strong{display:block;margin-top:3px;font-weight:700;word-break:break-word;text-align:right;font-variant-numeric:tabular-nums}.pill{display:inline-flex;align-items:center;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);padding:4px 9px;font-size:12px;font-weight:700;color:var(--ink-2)}.pill.ok{background:var(--success-bg);border-color:#5eead4;color:var(--success)}.pill.warn{background:var(--warn-bg);border-color:#f6d365;color:var(--warn)}.pill.err{background:var(--error-bg);border-color:#f0a79d;color:var(--error)}
 .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.actions.end{justify-content:flex-end}.btn{border:1px solid var(--line-2);background:#fff;color:var(--ink);border-radius:6px;height:34px;padding:0 11px;font-weight:650;font-size:13px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.btn:hover{filter:brightness(.985)}.btn:disabled{opacity:.5;cursor:not-allowed}.icon-btn{width:30px;height:30px;padding:0;border:0;background:transparent;color:var(--ink-2);border-radius:5px;font-size:19px;line-height:1}.icon-btn:hover{background:var(--surface);color:var(--ink)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{margin-bottom:14px}.field label{display:block;font-size:12px;color:var(--ink-2);font-weight:650;margin-bottom:5px}.field-help{margin-top:6px;margin-bottom:12px;color:var(--ink-2);font-size:11.5px;line-height:1.5;overflow-wrap:anywhere}.field input,.field textarea,.field select{width:100%%;min-height:36px;border:1px solid var(--line-2);background:#fff;border-radius:8px;color:var(--ink);padding:8px 10px;outline:none}.field select,.usage-filters select,.test-model{appearance:auto;cursor:pointer;border-radius:8px;min-height:36px}.field select option,.usage-filters select option{padding:8px 10px;background:#fff;color:var(--ink)}.field input:focus,.field textarea:focus,.field select:focus,.usage-filters select:focus{border-color:var(--accent);box-shadow:0 0 0 3px #2563eb1a}.field textarea{resize:vertical;min-height:74px;font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:12px}.toggle{display:flex;align-items:center;gap:9px;background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:9px;margin-bottom:10px}.toggle input{width:16px;height:16px}.toggle span{font-weight:650}.notice{background:var(--warn-bg);border:1px solid #f6d365;color:var(--warn);border-radius:6px;padding:10px;margin-bottom:10px}.notice-bar{display:none;margin:10px 0 12px;border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:12px;font-weight:650}.notice-bar.show{display:block}.notice-bar.ok{background:var(--success-bg);border-color:#5eead4;color:var(--success)}.notice-bar.warn{background:var(--warn-bg);border-color:#f6d365;color:var(--warn)}.notice-bar.err{background:var(--error-bg);border-color:#f0a79d;color:var(--error)}.result{display:none;white-space:pre-wrap;word-break:break-word;border-radius:6px;padding:10px;margin-top:12px;background:#22221f;color:#eceae5;font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:12px;max-height:230px;overflow:auto}.chips{display:flex;gap:7px;flex-wrap:wrap}.chip{background:var(--surface);border:1px solid var(--line-2);border-radius:999px;padding:5px 9px;font-size:12px;font-weight:650}.log{max-height:220px;overflow:auto;background:#22221f;color:#eceae5;border-radius:6px;padding:10px;font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:12px}.event{padding:3px 0}.danger{color:var(--error)}.hidden{display:none!important}
+.custom-select{position:relative;width:100%%}
+.custom-select-trigger{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%%;min-height:36px;border:1px solid var(--line-2);background:#fff;border-radius:8px;padding:8px 12px;font:inherit;font-size:13px;color:var(--ink);cursor:pointer;text-align:left;transition:border-color .15s,box-shadow .15s}
+.custom-select-trigger:hover{border-color:var(--line-2)}
+.custom-select.open .custom-select-trigger{border-color:var(--accent);box-shadow:0 0 0 3px #2563eb1a}
+.custom-select-value{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.custom-select-arrow{width:8px;height:8px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);opacity:.5;flex:0 0 auto;margin-top:-3px;transition:transform .18s ease}
+.custom-select.open .custom-select-arrow{transform:rotate(-135deg);margin-top:3px}
+.custom-select-panel{position:absolute;top:calc(100%% + 4px);left:0;right:0;z-index:40;background:var(--panel);border:1px solid var(--line-2);border-radius:10px;box-shadow:0 8px 24px #00000018;padding:6px;display:none;max-height:280px;overflow:auto}
+.custom-select.open .custom-select-panel{display:block}
+.custom-select-option{display:block;width:100%%;border:0;background:transparent;border-radius:6px;padding:8px 10px;font:inherit;font-size:13px;color:var(--ink);cursor:pointer;text-align:left}
+.custom-select-option:hover{background:var(--surface)}
+.custom-select-option.selected{background:#e8f0fe;color:var(--accent);font-weight:650}
+.custom-select-panel::-webkit-scrollbar{width:6px}
+.custom-select-panel::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:3px}
+.test-model-select{min-width:220px;max-width:100%%}
 .drawer-tabs{display:flex;gap:4px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--inset)}.drawer-tab{flex:1;border:1px solid transparent;background:transparent;color:var(--ink-2);border-radius:6px;height:34px;padding:0 10px;font-size:12px;font-weight:700;cursor:pointer}.drawer-tab.active{background:#fff;border-color:var(--line-2);color:var(--ink);box-shadow:var(--shadow)}.drawer-pane.hidden{display:none!important}.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}.usage-overview{margin-top:10px}.usage-filters{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;margin:12px 0}.usage-filters label{display:block}.usage-filters label span{display:block;font-size:11px;color:var(--ink-2);font-weight:700;margin-bottom:5px}.usage-filters select{width:100%%;min-height:36px;border:1px solid var(--line-2);background:#fff;border-radius:8px;padding:8px 10px;color:var(--ink);cursor:pointer}.usage-filters select option{padding:8px 10px;background:#fff;color:var(--ink)}.usage-metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}.usage-metric{background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:10px;min-width:0}.usage-metric span{display:block;color:var(--ink-3);font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.04em}.usage-metric strong{display:block;margin-top:4px;font-size:15px;word-break:break-word}.usage-analysis-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}.usage-panel{min-width:0}.usage-panel .card-head{min-height:34px}.share-list{display:flex;flex-direction:column;gap:11px}.share-row{min-width:0}.share-row-head,.share-meta{display:flex;justify-content:space-between;gap:10px;align-items:baseline}.share-row-head strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.share-row-head span,.share-meta{font-size:11px;color:var(--ink-2)}.share-bar{height:7px;margin-top:5px;border-radius:999px;background:var(--surface);overflow:hidden}.share-bar span{display:block;height:100%%;min-width:2px;border-radius:999px;background:var(--accent)}.share-row:nth-child(3n+2) .share-bar span{background:#0f766e}.share-row:nth-child(3n+3) .share-bar span{background:#d97706}.share-meta{margin-top:3px}.bucket-list,.recent-list{display:flex;flex-direction:column;gap:0}.bucket-row,.recent-row{display:flex;justify-content:space-between;gap:10px;align-items:center;border-bottom:1px solid var(--line);padding:8px 0}.bucket-row:last-child,.recent-row:last-child{border-bottom:0}.bucket-row span,.bucket-row small,.recent-row small{color:var(--ink-2);font-size:11px}.bucket-row strong,.recent-row strong{font-size:12px}.recent-row>div:first-child{min-width:0}.recent-row>div:first-child strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.recent-row>div:first-child small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.recent-value{text-align:right;flex:0 0 auto}.recent-value small{display:block}.usage-tag{display:inline-flex;border-radius:999px;background:var(--success-bg);color:var(--success);padding:2px 6px;font-size:10px}.usage-empty{color:var(--ink-3);font-size:12px;border:1px dashed var(--line-2);border-radius:6px;padding:10px}.drawer-usage-summary{background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:11px;margin-bottom:10px}.drawer-usage-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}.drawer-usage-metrics span{background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px;font-size:11px;color:var(--ink-2)}.drawer-usage-metrics strong{display:block;color:var(--ink);font-size:14px}.usage-drawer-filters{margin-bottom:10px}
 .accordion{border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow);margin-top:12px;overflow:hidden}.accordion summary{cursor:pointer;list-style:none;padding:13px 14px;font-weight:700;color:var(--ink);display:flex;align-items:center;justify-content:space-between;gap:10px}.accordion summary::-webkit-details-marker{display:none}.accordion summary .mini-pill{margin-left:auto}.accordion summary::after,.rowcard summary::after{content:"";width:8px;height:8px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .18s ease, opacity .18s ease;opacity:.6;flex:0 0 auto}.accordion[open] summary::after,.rowcard[open] summary::after{transform:rotate(-135deg);opacity:.9}.accordion-body{padding:0 14px 16px}.rowlist{display:flex;flex-direction:column;gap:12px;margin-top:12px}.rowcard{border:1px solid var(--line);border-radius:8px;background:var(--inset);overflow:hidden}.rowcard summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;font-weight:700;color:var(--ink)}.rowcard summary::-webkit-details-marker{display:none}.rowcard-main{min-width:0;display:flex;flex-direction:column;gap:2px}.rowcard-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.rowcard-title strong{font-size:13px;min-width:0}.rowcard-sub{font-size:11px;font-weight:650;color:var(--ink-2);word-break:break-word}.rowcard-tools{display:flex;align-items:center;gap:8px;flex:0 0 auto;margin-left:auto}.row-badges{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}.row-badge{display:inline-flex;align-items:center;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);padding:3px 8px;font-size:11px;font-weight:700;color:var(--ink-2)}.row-badge.image{background:#eef2ff;border-color:#c7d2fe;color:#4338ca}.row-badge.thinking{background:#fff7ed;border-color:#fed7aa;color:#9a3412}.row-badge.test-ok{background:var(--success-bg);border-color:#5eead4;color:var(--success)}.row-badge.test-err{background:var(--error-bg);border-color:#f0a79d;color:var(--error)}.row-body{padding:12px;border-top:1px solid var(--line);background:#fff}.rowgrid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto auto;gap:10px;align-items:end}.rowgrid.cols-3{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto}.rowgrid .field{margin-bottom:0}.mini-pill{display:inline-flex;align-items:center;min-width:22px;justify-content:center;padding:2px 6px;border-radius:999px;background:var(--surface);border:1px solid var(--line-2);font-size:11px;font-weight:700;color:var(--ink-2)}.muted.small{font-size:12px;color:var(--ink-2)}.model-think{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}.think-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.think-pill{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:#fff;font-size:12px}.think-pill span{display:flex;flex-direction:column;gap:2px}.think-pill small{font-size:10px;color:var(--ink-3);text-transform:lowercase;letter-spacing:.04em}.think-pill input{width:16px;height:16px}.picker{position:absolute;inset:0;background:var(--panel);z-index:2;padding:16px 18px 24px;overflow:auto}.picker-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}.picker-list{display:flex;flex-direction:column;gap:6px;margin-top:10px;max-height:min(56vh,560px);overflow:auto;padding-right:2px}.picker-row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:9px 10px}.picker-row label{display:flex;gap:9px;align-items:center;min-width:0;font-size:12px;font-weight:650}.picker-row code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.picker-actions{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:14px}.test-model{min-width:220px;max-width:100%%}.save-actions{justify-content:flex-end;margin-top:16px;padding-top:2px}
 @media(max-width:1100px){.usage-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
@@ -672,14 +687,14 @@ func providerEditorHTML(data providerEditorData) string {
 <input type="hidden" id="original_name"><input type="hidden" id="original_prefix"><input type="hidden" id="original_base_url">
 <div class="grid"><div class="field"><label for="name">Name</label><input id="name"></div><div class="field"><label for="prefix">Prefix</label><input id="prefix" placeholder="agy"></div></div>
 <div class="field"><label for="base_url">Base URL</label><input id="base_url" placeholder="http://host:port/v1"></div>
-<div class="grid"><div class="field"><label for="priority">Priority</label><input id="priority" type="number"></div><div class="field"><label for="hmac_source">HMAC source</label><select id="hmac_source"><option value="env">env</option><option value="config">config</option><option value="provider_api_key">provider_api_key</option><option value="none">none</option></select><div class="field-help"><strong>Recommended:</strong> choose <code>config</code> and fill <code>agy2api identity secret</code> below. It overrides <code>AGY_PLUGIN_SECRET</code> in the CPA container. Choose <code>env</code> only when the shared secret is intentionally managed by CPA environment configuration. <code>none</code> disables signing and agy2api will reject protected requests.</div></div></div>
+<div class="grid"><div class="field"><label for="priority">Priority</label><input id="priority" type="number"></div><div class="field"><label for="hmac_source">HMAC source</label><div class="custom-select" data-target="hmac_source" data-placeholder="Select a source"><button type="button" class="custom-select-trigger"><span class="custom-select-value">env</span><span class="custom-select-arrow"></span></button><div class="custom-select-panel"><button type="button" class="custom-select-option" data-value="env">env</button><button type="button" class="custom-select-option" data-value="config">config</button><button type="button" class="custom-select-option" data-value="provider_api_key">provider_api_key</button><button type="button" class="custom-select-option" data-value="none">none</button></div></div><input type="hidden" id="hmac_source" value="env"><div class="field-help"><strong>Recommended:</strong> choose <code>config</code> and fill <code>agy2api identity secret</code> below. It overrides <code>AGY_PLUGIN_SECRET</code> in the CPA container. Choose <code>env</code> only when the shared secret is intentionally managed by CPA environment configuration. <code>none</code> disables signing and agy2api will reject protected requests.</div></div></div>
 <label class="toggle"><input id="disabled" type="checkbox"><span>Disable original provider</span></label>
 <label class="toggle"><input id="disable_cooling" type="checkbox"><span>Disable cooling</span></label>
 
 <details class="accordion" open>
 <summary>API key entries <span id="api-key-count" class="mini-pill"></span></summary>
 <div class="accordion-body">
-<div class="actions"><button class="btn" type="button" id="add-key">+ Add key entry</button><select id="test-model" class="test-model" aria-label="Model used for tests"><option value="">Select a model to test</option></select><button class="btn" type="button" id="test-provider">Test all keys</button></div><div class="field-help">Select a model before testing. The test uses the selected model ID and sends the same identity headers as the executor.</div>
+<div class="actions"><button class="btn" type="button" id="add-key">+ Add key entry</button><div class="custom-select test-model-select" data-target="test-model" data-placeholder="Select a model to test"><button type="button" class="custom-select-trigger"><span class="custom-select-value">Select a model to test</span><span class="custom-select-arrow"></span></button><div class="custom-select-panel" id="test-model-panel"></div></div><input type="hidden" id="test-model" value=""><button class="btn" type="button" id="test-provider">Test all keys</button></div><div class="field-help">Select a model before testing. The test uses the selected model ID and sends the same identity headers as the executor.</div>
 <div id="api-key-rows" class="rowlist"></div>
 </div>
 </details>
@@ -706,10 +721,10 @@ func providerEditorHTML(data providerEditorData) string {
 <div class="field-help">This bridge is the identity layer between CPA and agy2api. Keep the plugin and executor enabled when this provider should serve through agy2api. The shared secret must match agy2api's <code>AGY_IDENTITY_BRIDGE_SECRET</code>.</div>
 <label class="toggle"><input id="enabled" type="checkbox"><span>Enable plugin</span></label>
 <label class="toggle"><input id="allow_explicit_client_identity_headers" type="checkbox"><span>Allow explicit client identity headers</span></label>
-<div class="grid"><div class="field"><label for="principal_fallback_mode">Fallback mode</label><select id="principal_fallback_mode"><option value="client_key_hash">client_key_hash</option><option value="user_agent_plus_session">user_agent_plus_session</option><option value="disabled">disabled</option></select></div><div class="field"><label for="debug_logging">Debug logging</label><select id="debug_logging"><option value="false">off</option><option value="true">on</option></select></div></div>
+<div class="grid"><div class="field"><label for="principal_fallback_mode">Fallback mode</label><div class="custom-select" data-target="principal_fallback_mode" data-placeholder="Select a mode"><button type="button" class="custom-select-trigger"><span class="custom-select-value">client_key_hash</span><span class="custom-select-arrow"></span></button><div class="custom-select-panel"><button type="button" class="custom-select-option" data-value="client_key_hash">client_key_hash</button><button type="button" class="custom-select-option" data-value="user_agent_plus_session">user_agent_plus_session</button><button type="button" class="custom-select-option" data-value="disabled">disabled</button></div></div><input type="hidden" id="principal_fallback_mode" value="client_key_hash"></div><div class="field"><label for="debug_logging">Debug logging</label><div class="custom-select" data-target="debug_logging" data-placeholder="Select a level"><button type="button" class="custom-select-trigger"><span class="custom-select-value">off</span><span class="custom-select-arrow"></span></button><div class="custom-select-panel"><button type="button" class="custom-select-option" data-value="false">off</button><button type="button" class="custom-select-option" data-value="true">on</button></div></div><input type="hidden" id="debug_logging" value="false"></div></div>
 <div class="field"><label for="hmac_secret">HMAC secret</label><input id="hmac_secret" type="password" placeholder="Write-only. Leave empty to keep current secret."></div>
 <div class="field"><label for="agy_secret">agy2api identity secret</label><input id="agy_secret" type="password" placeholder="Write-only. Leave empty to keep current secret."></div>
-<div class="grid"><div class="field"><label for="executor_enabled">Executor enabled</label><select id="executor_enabled"><option value="false">off</option><option value="true">on</option></select></div><div class="field"><label for="executor_provider">Executor provider</label><input id="executor_provider" placeholder="ln.Antigravity"></div></div>
+<div class="grid"><div class="field"><label for="executor_enabled">Executor enabled</label><div class="custom-select" data-target="executor_enabled" data-placeholder="Select state"><button type="button" class="custom-select-trigger"><span class="custom-select-value">off</span><span class="custom-select-arrow"></span></button><div class="custom-select-panel"><button type="button" class="custom-select-option" data-value="false">off</button><button type="button" class="custom-select-option" data-value="true">on</button></div></div><input type="hidden" id="executor_enabled" value="false"></div><div class="field"><label for="executor_provider">Executor provider</label><input id="executor_provider" placeholder="ln.Antigravity"></div></div>
 <div class="field"><label for="model_namespace">Model namespace override</label><input id="model_namespace" placeholder="Leave empty to keep provider prefix"></div>
 </div>
 </details>
@@ -733,6 +748,39 @@ let drawerOpen = document.body.classList.contains('drawer-open');
 let fetchedModels = [];
 
 function el(id){ return document.getElementById(id); }
+function initCustomSelects(){
+	document.querySelectorAll('.custom-select').forEach(box=>{
+		if(box.dataset.initialized === 'true') return;
+		box.dataset.initialized = 'true';
+		const trigger = box.querySelector('.custom-select-trigger');
+		const panel = box.querySelector('.custom-select-panel');
+		const target = el(box.dataset.target || '');
+		const display = box.querySelector('.custom-select-value');
+		if(!trigger || !panel || !target || !display) return;
+		const renderValue = ()=>{
+			const current = target.value || '';
+			let label = box.dataset.placeholder || '';
+			panel.querySelectorAll('.custom-select-option').forEach(option=>{
+				const value = option.dataset.value || '';
+				option.classList.toggle('selected', value === current);
+				if(value === current) label = option.textContent || value;
+			});
+			display.textContent = label || current || 'Select';
+		};
+		renderValue();
+		trigger.addEventListener('click', ev=>{ ev.stopPropagation(); document.querySelectorAll('.custom-select.open').forEach(other=>{ if(other !== box) other.classList.remove('open'); }); box.classList.toggle('open', !box.classList.contains('open')); });
+		panel.addEventListener('click', ev=>{ ev.stopPropagation(); const option = ev.target.closest('.custom-select-option'); if(!option) return; target.value = option.dataset.value || ''; renderValue(); box.classList.remove('open'); target.dispatchEvent(new Event('change', {bubbles: true})); });
+		box.addEventListener('custom-select-change', renderValue);
+		target.addEventListener('value-changed', renderValue);
+	});
+}
+function setCustomSelectValue(targetId, value){
+	const target = el(targetId);
+	if(!target) return;
+	target.value = value;
+	target.dispatchEvent(new Event('value-changed', {bubbles: true}));
+}
+document.addEventListener('click', ()=>{ document.querySelectorAll('.custom-select.open').forEach(box=>box.classList.remove('open')); });
 function managementKey(){ return el('mkey').value.trim() || sessionStorage.getItem('agyBridgeManagementKey') || ''; }
 function mgmtHeaders(json){ const key = managementKey(); const headers = {}; if(json) headers['Content-Type'] = 'application/json'; if(key){ headers['X-Management-Key'] = key; headers['Authorization'] = 'Bearer ' + key; } return headers; }
 function show(value){ const out = el('result'); out.style.display = 'block'; out.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); }
@@ -748,20 +796,36 @@ function bindKeyRow(node){ const input = node.querySelector('.api-key-value'); c
 function bindHeaderRow(node){ const remove = node.querySelector('.row-remove'); if(remove){ remove.onclick = ev=>{ ev.preventDefault(); ev.stopPropagation(); node.remove(); updateCounts(); }; } }
 function bindModelRow(node){ const refresh = ()=>updateModelSummary(node); const remove = node.querySelector('.row-remove'); const nameInput = node.querySelector('.model-name'); const aliasInput = node.querySelector('.model-alias'); const imageInput = node.querySelector('.model-image'); if(nameInput){ nameInput.addEventListener('input', refresh); } if(aliasInput){ aliasInput.addEventListener('input', refresh); } if(imageInput){ imageInput.addEventListener('change', refresh); } node.querySelectorAll('.model-think-level').forEach(cb=>{ cb.addEventListener('change', ()=>{ syncThinkControls(node, cb); refresh(); updateCounts(); }); }); if(remove){ remove.onclick = ev=>{ ev.preventDefault(); ev.stopPropagation(); node.remove(); updateCounts(); }; } refresh(); }
 function renderTestModelOptions(rows){
-	const select = el('test-model');
-	if(!select) return;
-	const current = select.value;
-	select.innerHTML = '<option value="">Select a model to test</option>';
+	const hidden = el('test-model');
+	const panel = el('test-model-panel');
+	if(!hidden || !panel) return;
+	const current = hidden.value;
+	panel.innerHTML = '';
+	const placeholder = document.createElement('button');
+	placeholder.type = 'button';
+	placeholder.className = 'custom-select-option';
+	placeholder.dataset.value = '';
+	placeholder.textContent = 'Select a model to test';
+	panel.appendChild(placeholder);
 	(rows || []).forEach(row=>{
 		const name = row && row.name ? row.name : '';
 		if(!name) return;
-		const option = document.createElement('option');
+		const option = document.createElement('button');
+		option.type = 'button';
+		option.className = 'custom-select-option';
 		option.value = name;
 		option.textContent = row.alias ? name + ' - ' + row.alias : name;
-		select.appendChild(option);
+		option.dataset.value = name;
+		panel.appendChild(option);
 	});
-	if(current && Array.from(select.options).some(option=>option.value === current)) select.value = current;
-	else if(select.options.length === 2) select.selectedIndex = 1;
+	const options = Array.from(panel.querySelectorAll('.custom-select-option'));
+	if(current && options.some(option=>option.dataset.value === current)) hidden.value = current;
+	else if(options.length === 2) hidden.value = options[1].dataset.value || '';
+	else hidden.value = '';
+	panel.querySelectorAll('.custom-select-option').forEach(option=>{
+		option.addEventListener('click', ev=>{ ev.stopPropagation(); hidden.value = option.dataset.value || ''; hidden.dispatchEvent(new Event('value-changed', {bubbles: true})); const box = panel.closest('.custom-select'); if(box) box.classList.remove('open'); });
+	});
+	hidden.dispatchEvent(new Event('value-changed', {bubbles: true}));
 }
 function render(data){
 	state = data;
@@ -778,16 +842,16 @@ function render(data){
 	el('disable_cooling').checked = !!p.disable_cooling;
 	el('enabled').checked = pl.enabled !== false;
 	el('allow_explicit_client_identity_headers').checked = pl.allow_explicit_client_identity_headers !== false;
-	el('principal_fallback_mode').value = pl.principal_fallback_mode || 'client_key_hash';
-	el('debug_logging').value = pl.debug_logging ? 'true' : 'false';
-	el('executor_enabled').value = pl.executor_enabled ? 'true' : 'false';
+	setCustomSelectValue('principal_fallback_mode', pl.principal_fallback_mode || 'client_key_hash');
+	setCustomSelectValue('debug_logging', pl.debug_logging ? 'true' : 'false');
+	setCustomSelectValue('executor_enabled', pl.executor_enabled ? 'true' : 'false');
 	el('executor_provider').value = pl.executor_provider || 'ln.Antigravity';
 	el('model_namespace').value = pl.model_namespace || '';
 	el('hmac_secret').value = '';
 	el('hmac_secret').placeholder = pl.hmac_secret_configured ? 'Write-only. Secret configured; leave empty to keep it.' : 'Write-only. Paste shared HMAC secret.';
 	el('agy_secret').value = '';
 	el('agy_secret').placeholder = pl.agy2api_identity_secret_configured ? 'Write-only. Secret configured; leave empty to keep it.' : 'Write-only. Paste shared agy2api secret.';
-	el('hmac_source').value = pl.hmac_secret_source === 'agy2api_identity_secret' ? 'config' : (pl.hmac_secret_source || 'env');
+	setCustomSelectValue('hmac_source', pl.hmac_secret_source === 'agy2api_identity_secret' ? 'config' : (pl.hmac_secret_source || 'env'));
 	el('metric-mode').textContent = p.replacement_mode || 'unknown';
 	el('metric-published').textContent = (p.published_model_ids || []).length;
 	el('metric-original').textContent = p.original_provider_live ? 'enabled' : 'disabled';
@@ -973,6 +1037,7 @@ function refreshLockedState(){ for(const id of ids){ setLocked(el(id), !!state.l
 render(state);
 refreshLockedState();
 setDrawer(drawerOpen);
+initCustomSelects();
 </script>
 </body>
 </html>`,
