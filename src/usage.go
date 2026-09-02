@@ -6,6 +6,8 @@ import (
 	"html"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -60,6 +62,7 @@ func recordUsageObservation(obs usageRecord) {
 		usageState.records = append([]usageRecord(nil), usageState.records[excess:]...)
 	}
 	usageState.Unlock()
+	saveUsageState()
 }
 
 func recentUsageRecords() []usageRecord {
@@ -77,6 +80,60 @@ func resetUsageState() {
 	usageState.Lock()
 	usageState.records = nil
 	usageState.Unlock()
+}
+
+// usageDataPath resolves a stable, persistent location for usage records.
+// The CPA config directory is mounted and survives plugin reloads, so it is
+// the natural place for this small JSON file. Falls back to the working
+// directory if the config path is unavailable.
+func usageDataPath() string {
+	for _, candidate := range []string{
+		os.Getenv("CPA_CONFIG_PATH"),
+		"/CLIProxyAPI/config.yaml",
+		"/cpa-config.yaml",
+	} {
+		dir := filepath.Dir(strings.TrimSpace(candidate))
+		if dir != "" && dir != "." {
+			return filepath.Join(dir, "agy-identity-bridge-usage.json")
+		}
+	}
+	return "agy-identity-bridge-usage.json"
+}
+
+func loadUsageState() {
+	path := usageDataPath()
+	raw, errRead := os.ReadFile(path)
+	if errRead != nil {
+		return
+	}
+	var records []usageRecord
+	if errUnmarshal := json.Unmarshal(raw, &records); errUnmarshal != nil {
+		return
+	}
+	usageState.Lock()
+	usageState.records = records
+	if excess := len(usageState.records) - maxUsageRecords; excess > 0 {
+		usageState.records = append([]usageRecord(nil), usageState.records[excess:]...)
+	}
+	usageState.Unlock()
+}
+
+func saveUsageState() {
+	usageState.RLock()
+	records := make([]usageRecord, len(usageState.records))
+	copy(records, usageState.records)
+	usageState.RUnlock()
+	if len(records) == 0 {
+		return
+	}
+	raw, errMarshal := json.Marshal(records)
+	if errMarshal != nil {
+		return
+	}
+	path := usageDataPath()
+	dir := filepath.Dir(path)
+	_ = os.MkdirAll(dir, 0o755)
+	_ = os.WriteFile(path, raw, 0o600)
 }
 
 func parseUsageObservation(body []byte, headers map[string][]string) (usageTotals, bool) {

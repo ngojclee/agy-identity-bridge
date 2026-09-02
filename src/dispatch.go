@@ -161,6 +161,7 @@ func configurePlugin(raw []byte) error {
 	}
 	snapshot := loadPluginConfiguration(request.ConfigYAML)
 	applyPluginConfiguration(snapshot)
+	loadUsageState()
 
 	// The mirrored provider record can change when CPA config changes, so the
 	// cache is dropped and rebuilt from the freshly loaded config.
