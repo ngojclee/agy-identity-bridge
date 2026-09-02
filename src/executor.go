@@ -190,16 +190,35 @@ type clientIdentity struct {
 }
 
 func identityFromExecutorRequest(req executorRequest) clientIdentity {
+	settings := currentPluginSettings()
+	var (
+		headerPrincipal   string
+		headerClientApp   string
+		headerInstance    string
+		headerProfile     string
+		headerConnectorID string
+		headerSessionID   string
+	)
+	if settings.AllowExplicitClientIdentityHeaders {
+		headerPrincipal = firstHeaderValue(req.Headers, "X-AGY-Principal")
+		headerClientApp = firstHeaderValue(req.Headers, "X-AGY-Client-App", "X-AGY-Device")
+		headerInstance = firstHeaderValue(req.Headers, "X-AGY-Client-Instance")
+		headerProfile = firstHeaderValue(req.Headers, "X-AGY-Capability-Profile")
+		headerConnectorID = firstHeaderValue(req.Headers, "X-AGY-Connector-Id")
+		headerSessionID = firstHeaderValue(req.Headers, "X-AGY-Session-ID", "X-Session-ID")
+	}
 	context := clientIdentityContext{
-		Principal:         firstHeaderValue(req.Headers, "X-AGY-Principal"),
-		ClientApp:         firstHeaderValue(req.Headers, "X-AGY-Client-App", "X-AGY-Device"),
-		ClientInstance:    firstHeaderValue(req.Headers, "X-AGY-Client-Instance"),
-		CapabilityProfile: firstHeaderValue(req.Headers, "X-AGY-Capability-Profile"),
-		ConnectorID:       firstHeaderValue(req.Headers, "X-AGY-Connector-Id"),
-		SessionID:         firstHeaderValue(req.Headers, "X-AGY-Session-ID", "X-Session-ID"),
+		Principal:         headerPrincipal,
+		ClientApp:         headerClientApp,
+		ClientInstance:    headerInstance,
+		CapabilityProfile: headerProfile,
+		ConnectorID:       headerConnectorID,
+		SessionID:         headerSessionID,
 		ProviderName:      firstHeaderValue(req.Headers, "X-AGY-CPA-Provider-Name", "X-AGY-Provider"),
-		Timestamp:         firstHeaderValue(req.Headers, "X-AGY-Timestamp"),
-		ExplicitIdentity:  true,
+		ExplicitIdentity:  headerPrincipal != "" || headerClientApp != "" || headerInstance != "" || headerProfile != "" || headerConnectorID != "",
+	}
+	if headerPrincipal != "" {
+		context.Timestamp = firstHeaderValue(req.Headers, "X-AGY-Timestamp")
 	}
 	if context.ClientApp == "" {
 		context.ClientApp = normalizeClientApp("", firstHeaderValue(req.Headers, "User-Agent"))

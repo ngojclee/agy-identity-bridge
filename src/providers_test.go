@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -384,6 +387,90 @@ openai-compatibility:
 		ToFormat: "antigravity", Native: true,
 	}); matched || len(by) != 0 {
 		t.Fatal("include_native_antigravity=false must not match native requests")
+	}
+}
+
+// Interceptor-only traffic must carry the same canonical signature contract
+// as executor traffic, so agy2api can refine the principal without trusting
+// unsigned headers.
+func TestInterceptAfterSignsCanonicalIdentity(t *testing.T) {
+	previousSettings := currentPluginSettings()
+	defer func() {
+		pluginSettingsMu.Lock()
+		pluginSettings = previousSettings
+		pluginSettingsMu.Unlock()
+		refreshMatchedRecords(nil)
+	}()
+	t.Setenv("CPA_CONFIG_PATH", "Z:\\missing\\cpa-config.yaml")
+	t.Setenv("AGY_PLUGIN_SECRET", "intercept-signing-secret-0123456789")
+
+	applyPluginConfiguration(loadPluginConfiguration([]byte(`
+plugins:
+  configs:
+    agy-identity-bridge:
+      enabled: true
+      auto_discover: true
+openai-compatibility:
+  - name: Antigravity
+    prefix: agy
+    base-url: http://10.21.4.101:8123/v1
+    api-key-entries:
+      - api-key: provider-secret
+`)))
+	diagnostics := scanProviderDiagnostics()
+	if diagnostics.MatchedRecordCount != 1 {
+		t.Fatalf("matched records = %d, want 1", diagnostics.MatchedRecordCount)
+	}
+
+	raw := []byte(`{"ToFormat":"openai","RequestedModel":"agy/gemini-3.5-flash-low","Headers":{"Authorization":["Bearer client-key"],"User-Agent":["codex-tui/0.128.0"]}}`)
+	response, errHandle := handleInterceptAfter(raw)
+	if errHandle != nil {
+		t.Fatal(errHandle)
+	}
+	var decoded struct {
+		OK     bool `json:"ok"`
+		Result struct {
+			Headers map[string][]string `json:"Headers"`
+		} `json:"result"`
+	}
+	if errUnmarshal := json.Unmarshal(response, &decoded); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	headers := decoded.Result.Headers
+	principal := ""
+	timestamp := ""
+	signature := ""
+	for key, values := range headers {
+		switch strings.ToLower(key) {
+		case "x-agy-principal":
+			principal = values[0]
+		case "x-agy-timestamp":
+			timestamp = values[0]
+		case "x-agy-signature":
+			signature = values[0]
+		}
+	}
+	if principal == "" || timestamp == "" || signature == "" {
+		t.Fatalf("interceptor response missing signed identity headers: %s", response)
+	}
+	message := strings.Join([]string{
+		"principal=" + principal,
+		"timestamp=" + timestamp,
+		"client_app=" + headers["X-AGY-Client-App"][0],
+		"client_instance=" + "",
+		"capability_profile=" + "",
+		"connector_id=" + "",
+		"method=POST",
+		"path=/chat/completions",
+	}, "\n")
+	mac := hmac.New(sha256.New, []byte("intercept-signing-secret-0123456789"))
+	mac.Write([]byte(message))
+	expected := hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(expected), []byte(signature)) {
+		t.Fatalf("signature does not match canonical payload: %s", response)
+	}
+	if strings.Contains(string(response), "provider-secret") || strings.Contains(string(response), "client-key") {
+		t.Fatal("response leaked a credential")
 	}
 }
 

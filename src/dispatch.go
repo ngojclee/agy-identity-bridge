@@ -161,7 +161,6 @@ func configurePlugin(raw []byte) error {
 	}
 	snapshot := loadPluginConfiguration(request.ConfigYAML)
 	applyPluginConfiguration(snapshot)
-	resetExecutorAuthRecordState()
 
 	// The mirrored provider record can change when CPA config changes, so the
 	// cache is dropped and rebuilt from the freshly loaded config.
@@ -385,6 +384,9 @@ func handleInterceptAfter(request []byte) ([]byte, error) {
 	}
 	if identity.ConnectorID != "" {
 		headers["X-AGY-Connector-Id"] = []string{identity.ConnectorID}
+	}
+	if secret := hmacSecretForCandidate(settings, candidate); secret != "" {
+		headers["X-AGY-Signature"] = []string{computeHMAC(identitySignatureMessage(identity, "POST", "/chat/completions"), secret)}
 	}
 	return okEnvelope(InterceptResponsePayload{Headers: headers}), nil
 }

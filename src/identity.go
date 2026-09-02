@@ -28,12 +28,26 @@ func deriveClientIdentityFromIntercept(payload InterceptRequestPayload, settings
 		headers = map[string][]string{}
 	}
 	metadata := payload.Metadata
+	var (
+		headerClientApp   string
+		headerInstance    string
+		headerProfile     string
+		headerConnectorID string
+		headerSessionID   string
+	)
+	if settings.AllowExplicitClientIdentityHeaders {
+		headerClientApp = firstHeaderValue(headers, "X-AGY-Client-App")
+		headerInstance = firstHeaderValue(headers, "X-AGY-Client-Instance")
+		headerProfile = firstHeaderValue(headers, "X-AGY-Capability-Profile")
+		headerConnectorID = firstHeaderValue(headers, "X-AGY-Connector-Id")
+		headerSessionID = firstHeaderValue(headers, "X-AGY-Session-ID", "X-Session-ID")
+	}
 	context := clientIdentityContext{
-		ClientApp:         firstHeaderValue(headers, "X-AGY-Client-App"),
-		ClientInstance:    firstHeaderValue(headers, "X-AGY-Client-Instance"),
-		CapabilityProfile: firstHeaderValue(headers, "X-AGY-Capability-Profile"),
-		ConnectorID:       firstHeaderValue(headers, "X-AGY-Connector-Id"),
-		SessionID:         firstHeaderValue(headers, "X-AGY-Session-ID", "X-Session-ID"),
+		ClientApp:         headerClientApp,
+		ClientInstance:    headerInstance,
+		CapabilityProfile: headerProfile,
+		ConnectorID:       headerConnectorID,
+		SessionID:         headerSessionID,
 	}
 	if settings.AllowExplicitClientIdentityHeaders {
 		context.ClientApp = firstNonEmpty(context.ClientApp, metadataString(metadata, "client_app", "client-app"))

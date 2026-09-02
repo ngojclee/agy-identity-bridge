@@ -117,6 +117,39 @@ func TestDeriveStablePrincipalUsesExplicitClientIdentity(t *testing.T) {
 	}
 }
 
+// Flag off must not let a client's identity headers influence principal
+// derivation or survive into the executor's upstream request.
+func TestExplicitIdentityHeadersSanitizedWhenFlagOff(t *testing.T) {
+	settings := PluginSettings{AllowExplicitClientIdentityHeaders: false}
+	enabled := PluginSettings{AllowExplicitClientIdentityHeaders: true}
+	payload := InterceptRequestPayload{
+		Headers: map[string][]string{
+			"X-AGY-Client-App":         {"attacker"},
+			"X-AGY-Client-Instance":    {"forged"},
+			"X-AGY-Capability-Profile": {"admin"},
+			"X-AGY-Connector-Id":       {"evil"},
+			"User-Agent":               {"codex/1.0"},
+		},
+	}
+	sanitized := deriveClientIdentityFromIntercept(payload, settings)
+	if sanitized.ClientApp != "codex" {
+		t.Fatalf("flag-off derived app = %q, want UA-derived codex", sanitized.ClientApp)
+	}
+	if sanitized.ClientInstance != "" || sanitized.CapabilityProfile != "" || sanitized.ConnectorID != "" {
+		t.Fatalf("flag-off leaked explicit identity: %+v", sanitized)
+	}
+	if sanitized.PrincipalSource == "explicit" {
+		t.Fatalf("flag-off used explicit principal source: %+v", sanitized)
+	}
+	trusted := deriveClientIdentityFromIntercept(payload, enabled)
+	if trusted.ClientApp != "attacker" || trusted.ClientInstance != "forged" {
+		t.Fatalf("flag-on should honour explicit identity: %+v", trusted)
+	}
+	if trusted.Principal == sanitized.Principal {
+		t.Fatal("explicit and fallback principal must differ")
+	}
+}
+
 func TestPluginRegistration(t *testing.T) {
 	reg := pluginRegistration()
 	if !reg.Capabilities.RequestInterceptor {
