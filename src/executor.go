@@ -81,8 +81,11 @@ func executorAuthJSON(spec providerSpec, settings PluginSettings) ([]byte, error
 		"type":     provider,
 		"base_url": spec.upstreamBaseURL(),
 		"api_key":  spec.primaryAPIKey(),
-		// The executor provider is already the canonical identity. Do not add
-		// a duplicate label: usage consumers may join type and label.
+		// CPA sets auth.Label from metadata.email. Without a real email the
+		// token tracker joins provider + label and shows duplicated names such
+		// as ln.Antigravity-ln.Antigravity. A stable pseudo-email keeps the
+		// label distinct while never exposing a credential.
+		"email":  "agy-identity-bridge@local",
 		"prefix": modelNamespace(settings.ModelNamespace, spec.Prefix),
 	})
 	if errMarshal != nil {

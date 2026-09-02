@@ -179,6 +179,9 @@ func compatModels(providerMap map[string]any) []modelSpec {
 // a live one and falling back to a disabled match so the operator can mirror a
 // provider they have already switched off.
 func extractProviderSpec(root map[string]any, settings PluginSettings) (providerSpec, bool) {
+	// The plugin serves models from the upstream /models endpoint it fetched
+	// itself. A provider block that has no models (or has been removed) must
+	// not zero out the published list, so the cached IDs are merged in below.
 	var fallback providerSpec
 	haveFallback := false
 	for _, providerMap := range openAICompatEntries(root) {
@@ -229,9 +232,55 @@ func extractProviderSpec(root map[string]any, settings PluginSettings) (provider
 		}
 	}
 	if haveFallback {
+		if len(fallback.Models) == 0 {
+			fallback.Models = cachedModelSpecs(fallback.BaseURL)
+		}
 		return fallback, true
 	}
-	return providerSpec{}, false
+	cached := cachedProviderSpecFromCache()
+	return cached, cached.BaseURL != ""
+}
+
+// cachedModelSpecs converts cached model IDs into editable model specs so the
+// provider editor and executor keep serving the same list.
+func cachedModelSpecs(baseURL string) []modelSpec {
+	ids := loadModelCache()
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]modelSpec, 0, len(ids))
+	for _, id := range ids {
+		image := strings.Contains(strings.ToLower(id), "image")
+		out = append(out, modelSpec{
+			Name:  id,
+			Image: image,
+			Thinking: func() *thinkingSpec {
+				if image {
+					return nil
+				}
+				return &thinkingSpec{Levels: []string{"low", "medium", "high"}}
+			}(),
+		})
+	}
+	return out
+}
+
+// cachedProviderSpecFromCache restores a serviceable spec purely from the
+// persisted model cache plus the current plugin settings. It is used when the
+// original provider block has been removed from CPA config entirely.
+func cachedProviderSpecFromCache() providerSpec {
+	settings := currentPluginSettings()
+	ids := loadModelCache()
+	if len(ids) == 0 {
+		return providerSpec{}
+	}
+	return providerSpec{
+		Name:     settings.ExecutorProvider,
+		Prefix:   settings.ModelNamespace,
+		Models:   cachedModelSpecs(""),
+		Enabled:  false,
+		Priority: 110,
+	}
 }
 
 // canServeModels is the collision guard. Publishing the mirrored provider's own

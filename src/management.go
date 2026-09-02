@@ -1153,6 +1153,9 @@ func handleProviderFetchModels(request pluginapi.ManagementRequest) ([]byte, err
 	if errProbe != nil {
 		return managementJSONResponse(http.StatusBadGateway, map[string]any{"ok": false, "error": errProbe.Error()}), nil
 	}
+	if status >= 200 && status < 300 && len(models) > 0 {
+		saveModelCache(spec.upstreamBaseURL(), models)
+	}
 	return managementJSONResponse(http.StatusOK, map[string]any{
 		"ok":          status >= 200 && status < 300,
 		"http_status": status,
