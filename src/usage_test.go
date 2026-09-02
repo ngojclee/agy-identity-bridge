@@ -45,6 +45,18 @@ func TestUsageTelemetryParsesStreamUsageText(t *testing.T) {
 	}
 }
 
+func TestCanonicalUsageProviderNameCollapsesDuplicatePresentation(t *testing.T) {
+	for input, want := range map[string]string{
+		"ln.Antigravity-ln.Antigravity": "ln.Antigravity",
+		"ln.Antigravity executor":       "ln.Antigravity",
+		"ln.Antigravity":                "ln.Antigravity",
+	} {
+		if got := canonicalUsageProviderName(input); got != want {
+			t.Fatalf("canonicalUsageProviderName(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
 func TestUsageDashboardHTMLIncludesFiltersAndOverview(t *testing.T) {
 	resetUsageState()
 	t.Cleanup(resetUsageState)
@@ -52,12 +64,12 @@ func TestUsageDashboardHTMLIncludesFiltersAndOverview(t *testing.T) {
 	usageState.Lock()
 	usageState.records = []usageRecord{
 		{
-			At:         time.Now().UTC(),
-			Provider:   "Antigravity",
-			Model:      "agy/gemini-3.7-flash-high",
-			ClientApp:  "codex",
-			Principal:  strings.Repeat("a", 64),
-			Mode:       "execute",
+			At:          time.Now().UTC(),
+			Provider:    "Antigravity",
+			Model:       "agy/gemini-3.7-flash-high",
+			ClientApp:   "codex",
+			Principal:   strings.Repeat("a", 64),
+			Mode:        "execute",
 			TotalTokens: 20,
 		},
 	}
@@ -84,4 +96,3 @@ func TestUsageDashboardHTMLIncludesFiltersAndOverview(t *testing.T) {
 		}
 	}
 }
-

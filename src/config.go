@@ -150,7 +150,7 @@ func normalizeSettings(s PluginSettings) PluginSettings {
 	s.MatchModels = models
 
 	s.ModelNamespace = strings.TrimSpace(s.ModelNamespace)
-	s.ExecutorProvider = normalizeProviderKey(s.ExecutorProvider)
+	s.ExecutorProvider = normalizeExecutorProviderKey(s.ExecutorProvider)
 	if s.ExecutorProvider == "" {
 		s.ExecutorProvider = defaultExecutorProvider
 	}
@@ -179,6 +179,23 @@ func normalizeProviderKey(value string) string {
 		}
 	}
 	return strings.Trim(builder.String(), "-")
+}
+
+// normalizeExecutorProviderKey keeps the plugin-owned provider identifier
+// stable when it is round-tripped through a UI or usage consumer. Some
+// consumers combine the executor provider with its auth label; accepting a
+// value such as "ln.Antigravity-ln.Antigravity" would make that duplication
+// permanent and would also create a second executor key in CPA.
+func normalizeExecutorProviderKey(value string) string {
+	value = normalizeProviderKey(value)
+	if value == "" {
+		return ""
+	}
+	parts := strings.Split(value, "-")
+	if len(parts) == 2 && strings.EqualFold(parts[0], parts[1]) {
+		return parts[0]
+	}
+	return value
 }
 
 // decodePluginSettings is kept as a compatibility helper for tests and older
@@ -612,14 +629,14 @@ func stringSliceValue(raw map[string]any, keys ...string) ([]string, bool) {
 }
 
 // hmacSecret returns the HMAC signing key, resolved in priority order:
-// 1. agy2api_identity_secret (dedicated plugin config field)
-// 2. hmac_secret (legacy plugin config field)
-// 3. AGY_PLUGIN_SECRET environment variable (CPA container env)
-// 4. provider_api_key (only when hmac_secret_source=provider_api_key, resolved
-//    per candidate in hmacSecretForCandidate)
-// 5. empty, which leaves requests unsigned. agy2api rejects unsigned requests,
-//    so an empty result with executor mode on is a configuration error the
-//    status page surfaces.
+//  1. agy2api_identity_secret (dedicated plugin config field)
+//  2. hmac_secret (legacy plugin config field)
+//  3. AGY_PLUGIN_SECRET environment variable (CPA container env)
+//  4. provider_api_key (only when hmac_secret_source=provider_api_key, resolved
+//     per candidate in hmacSecretForCandidate)
+//  5. empty, which leaves requests unsigned. agy2api rejects unsigned requests,
+//     so an empty result with executor mode on is a configuration error the
+//     status page surfaces.
 func (s PluginSettings) hmacSecret() string {
 	if s.Agy2apiIdentitySecret != "" {
 		return s.Agy2apiIdentitySecret

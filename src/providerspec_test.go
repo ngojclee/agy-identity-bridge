@@ -302,6 +302,12 @@ func TestExecutorProviderKeyIsNormalised(t *testing.T) {
 	if got := normalizeProviderKey(" AGY Bridge/Prod "); got != "AGY-Bridge-Prod" {
 		t.Fatalf("normalizeProviderKey = %q", got)
 	}
+	if got := normalizeExecutorProviderKey(" ln.Antigravity-ln.Antigravity "); got != "ln.Antigravity" {
+		t.Fatalf("normalizeExecutorProviderKey duplicate = %q", got)
+	}
+	if got := normalizeExecutorProviderKey("ln.Antigravity"); got != "ln.Antigravity" {
+		t.Fatalf("normalizeExecutorProviderKey canonical = %q", got)
+	}
 	settings := normalizeSettings(PluginSettings{})
 	if settings.ExecutorProvider != defaultExecutorProvider {
 		t.Fatalf("default provider key = %q", settings.ExecutorProvider)
@@ -339,6 +345,9 @@ func TestExecutorAuthRecordUsesVisibleModelPrefix(t *testing.T) {
 	}
 	if auth["prefix"] != "spike." {
 		t.Fatalf("namespaced auth prefix = %#v, want spike.", auth["prefix"])
+	}
+	if _, hasLabel := auth["label"]; hasLabel {
+		t.Fatalf("auth label = %#v, want label omitted for canonical provider identity", auth["label"])
 	}
 }
 
@@ -620,7 +629,7 @@ func TestDiagnosticsReportsMirroredProvider(t *testing.T) {
 		t.Fatalf("public diagnostics leaked base url: %q", public.MirroredBaseURL)
 	}
 	page := publicStatusPage(diagnostics)
-	for _, expected := range []string{"Mirrored provider", "Antigravity", "3", "Routing unchanged", "Executor off"} {
+	for _, expected := range []string{"Mirrored provider", "Antigravity", "3", "Open editor", "Replacement mode"} {
 		if !strings.Contains(page, expected) {
 			t.Fatalf("public page missing %q: %s", expected, page)
 		}

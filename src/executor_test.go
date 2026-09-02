@@ -213,6 +213,34 @@ func TestExecutorAuthSaveRequestEmbedsJSONObject(t *testing.T) {
 	if auth["type"] != defaultExecutorProvider {
 		t.Fatalf("auth type = %#v", auth["type"])
 	}
+	if _, hasLabel := auth["label"]; hasLabel {
+		t.Fatalf("auth label = %#v, want omitted for canonical provider identity", auth["label"])
+	}
+}
+
+func TestExecutorAuthJSONCanonicalizesDuplicateProviderKey(t *testing.T) {
+	spec := providerSpec{
+		BaseURL: "http://127.0.0.1:8123/v1",
+		APIKeys: []string{"test-key"},
+		Prefix:  "agy",
+	}
+	raw, errJSON := executorAuthJSON(spec, PluginSettings{
+		ExecutorProvider: "ln.Antigravity-ln.Antigravity",
+	})
+	if errJSON != nil {
+		t.Fatal(errJSON)
+	}
+
+	var auth map[string]any
+	if errUnmarshal := json.Unmarshal(raw, &auth); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	if auth["type"] != defaultExecutorProvider {
+		t.Fatalf("auth type = %#v, want %q", auth["type"], defaultExecutorProvider)
+	}
+	if _, hasLabel := auth["label"]; hasLabel {
+		t.Fatalf("auth label = %#v, want omitted", auth["label"])
+	}
 }
 
 func TestBuildUpstreamRequestRejectsUnusableProvider(t *testing.T) {

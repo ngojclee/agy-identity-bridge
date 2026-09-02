@@ -35,6 +35,59 @@ func TestProviderEditorHTMLHasManagementKeyGateAndProviderControls(t *testing.T)
 	}
 }
 
+func TestUnifiedDashboardContainsUsageFiltersAndDrawerAnalytics(t *testing.T) {
+	page := providerEditorHTML(providerEditorData{
+		Version: "test",
+		Diagnostics: providerDiagnostics{
+			ReplacementMode:     "active",
+			ExecutorProvider:    "ln.Antigravity",
+			ExecutorAuthEnsured: true,
+		},
+		Usage: usagePageData{
+			Filters: usageFilter{Period: "current_month", Bucket: "hour", Source: "all"},
+			Summary: usageSummary{
+				Requests:         12,
+				TotalTokens:      1200,
+				PromptTokens:     800,
+				CompletionTokens: 400,
+				CachedTokens:     200,
+				CacheHits:        3,
+				ModelCount:       2,
+				SourceCount:      1,
+			},
+			TopModels:  []usageGroup{{Label: "gemini-3.7-flash-high", Requests: 8, TotalTokens: 900}},
+			TopSources: []usageGroup{{Label: "codex", Requests: 12, TotalTokens: 1200}},
+			Recent:     []usageViewRecord{{Model: "gemini-3.7-flash-high", ClientApp: "codex", TotalTokens: 120}},
+			Buckets:    []usageBucket{{Label: "Sep 02 10:00", Requests: 12, TotalTokens: 1200}},
+		},
+	})
+	for _, expected := range []string{
+		"Single dashboard for the mirrored provider and its runtime telemetry",
+		"Usage analytics",
+		"Model usage share",
+		"Traffic by client",
+		"Recent usage",
+		"Activity buckets",
+		"drawer-tab",
+		"data-pane=\"usage-pane\"",
+		`name="period"`,
+		`name="bucket"`,
+		`name="source"`,
+		"gemini-3.7-flash-high",
+		"12",
+		"1200",
+	} {
+		if !strings.Contains(page, expected) {
+			t.Fatalf("unified dashboard missing %q", expected)
+		}
+	}
+	if strings.Count(page, `name="period"`) != 2 ||
+		strings.Count(page, `name="bucket"`) != 2 ||
+		strings.Count(page, `name="source"`) != 2 {
+		t.Fatalf("dashboard should expose filters in main content and drawer")
+	}
+}
+
 func TestPatchProviderConfigPreservesSecretsWhenWriteOnlyFieldsAreEmpty(t *testing.T) {
 	settings := decodePluginSettings([]byte(mirrorConfigYAML))
 	payload := providerEditorPayload{
@@ -129,7 +182,7 @@ func TestPatchProviderConfigUpdatesProviderAndPluginFields(t *testing.T) {
 	}
 	rawChanged, _ := json.Marshal(changed)
 	for _, field := range []string{"disabled", "api-key-entries", "agy2api_identity_secret"} {
-	if !strings.Contains(string(rawChanged), field) {
+		if !strings.Contains(string(rawChanged), field) {
 			t.Fatalf("changed fields missing %q: %s", field, rawChanged)
 		}
 	}
@@ -138,12 +191,12 @@ func TestPatchProviderConfigUpdatesProviderAndPluginFields(t *testing.T) {
 func TestPatchProviderConfigPreservesExistingApiKeysWhenBlankRowsStayBlank(t *testing.T) {
 	settings := decodePluginSettings([]byte(mirrorConfigYAML))
 	payload := providerEditorPayload{
-		OriginalName:     "Antigravity",
-		OriginalPrefix:   "agy",
-		OriginalBaseURL:  "http://10.21.4.101:8123/v1",
-		Name:             "Antigravity",
-		Prefix:           "agy",
-		BaseURL:          "http://10.21.4.101:8123/v1",
+		OriginalName:    "Antigravity",
+		OriginalPrefix:  "agy",
+		OriginalBaseURL: "http://10.21.4.101:8123/v1",
+		Name:            "Antigravity",
+		Prefix:          "agy",
+		BaseURL:         "http://10.21.4.101:8123/v1",
 		APIKeyRows: []providerEditorAPIKeyRow{
 			{Existing: true, Value: ""},
 			{Existing: false, Value: "new-provider-key"},

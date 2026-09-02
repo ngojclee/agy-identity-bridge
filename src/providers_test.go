@@ -33,11 +33,12 @@ func TestDashboardShowsOperationalState(t *testing.T) {
 	}
 	page := publicStatusPage(diagnostics)
 	for _, expected := range []string{
-		"Plugin replacement live",
-		"Live",
-		"ln.Antigravity auth ready",
-		"Plugin models published",
-		"agy2api HTTP 200",
+		"Single dashboard for the mirrored provider and its runtime telemetry",
+		"Open editor",
+		"Replacement mode",
+		"Runtime log",
+		"API key entries",
+		"Custom models",
 		"Runtime log",
 		"Plugin executor auth record is ready",
 		"background:#22221f;color:#eceae5",
@@ -77,13 +78,13 @@ func TestProviderDetailPageShowsLiveModelsAndConfig(t *testing.T) {
 	}
 	page := providerDetailPage(diagnostics)
 	for _, expected := range []string{
-		"Provider snapshot",
-		"Back to summary",
-		"Upstream base URL",
-		"http://10.21.4.101:8123/v1",
-		"Live model IDs",
-		"Mirrored model catalog",
-		"agy/gemini-3.7-flash-high",
+		"Close editor",
+		"Source provider",
+		"Request headers",
+		"Custom models",
+		"Allowed thinking levels",
+		"Base URL",
+		"gemini-3.7-flash-high",
 		"gemini-3.7-flash-low",
 		"ln.Antigravity",
 	} {
@@ -578,7 +579,7 @@ func TestPublicStatusPageShowsSummaryWithoutPrivateSelectors(t *testing.T) {
 		ConfigPath: "/private/config.yaml",
 	}
 	page := publicStatusPage(diagnostics)
-	if !strings.Contains(page, "Matched records") || !strings.Contains(page, "Antigravity") {
+	if !strings.Contains(page, "Open editor") || !strings.Contains(page, "Management access") {
 		t.Fatalf("public status page is missing summary/provider data: %s", page)
 	}
 	for _, privateValue := range []string{
@@ -621,6 +622,10 @@ func TestManagementRegistrationDeclaresStatusAndConfigFields(t *testing.T) {
 		if !strings.Contains(text, required) {
 			t.Fatalf("management registration missing %q: %s", required, text)
 		}
+	}
+	if strings.Contains(text, `"menu":"AGY Provider View"`) ||
+		strings.Contains(text, `"menu":"AGY Usage View"`) {
+		t.Fatalf("management registration still exposes legacy dashboard menus: %s", text)
 	}
 
 	fields := make(map[string]bool)

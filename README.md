@@ -16,7 +16,7 @@ For a matched request the plugin:
 
 The plugin does not modify unrelated providers.
 
-Release 0.2.10 keeps the identity bridge canonical payload stable for agy2api
+Release 0.2.11 keeps the identity bridge canonical payload stable for agy2api
 while preserving the legacy signing fallback during the transition period and
 adds passive usage telemetry for the mirrored provider.
 
@@ -280,18 +280,24 @@ serves plugin resource routes without management authentication, so account
 labels (native Antigravity auth labels are account emails) are also stripped
 from this projection. Use the authenticated status route when you need them.
 
-The Provider View is a provider-shaped dashboard for the mirrored
-`ln.Antigravity` path. It shows replacement mode, original-provider state,
-published model IDs, recent runtime events, and an editor with the same core
-fields as an OpenAI-compatible provider: name, base URL, prefix, priority,
-disabled state, disable cooling, headers, API keys, and custom models. Saving
-requires the CPA management key and writes only the selected mirrored provider
-plus this plugin's executor settings.
+The `AGY Identity Bridge` resource is a single dashboard for the mirrored
+`ln.Antigravity` path. Its main surface keeps the operational state, live model
+IDs, runtime log, usage filters, token totals, and compact usage analysis
+visible. Provider configuration and deeper usage analysis open in one wider
+right-side drawer with `Provider` and `Usage analytics` tabs.
 
-The Usage View is a separate sidecar for passive token telemetry. It reads
-`usage` data from agy2api responses when present, keeps the response body and
-headers untouched for other trackers, and groups the statistics by current
-month, hour/day bucket, and source. It is intentionally read-only.
+The provider tab has the same core fields as an OpenAI-compatible provider:
+name, base URL, prefix, priority, disabled state, disable cooling, headers,
+API keys, and custom models. API key entries, headers, models, and thinking
+levels can be collapsed independently. Saving requires the CPA management key
+and writes only the selected mirrored provider plus this plugin's executor
+settings.
+
+Usage analytics reads `usage` data from agy2api responses when present, keeps
+the response body and headers untouched for other trackers, and groups the
+statistics by period, hour/day bucket, source, model share, client source,
+cache performance, and recent observations. It remains passive and
+read-only.
 
 ## CPA Lifecycle Statuses
 
@@ -318,19 +324,19 @@ Go 1.26 and GCC:
 
 ```sh
 make test
-make build VERSION=0.2.10
+make build VERSION=0.2.11
 ```
 
 The output is:
 
 ```text
-dist/agy-identity-bridge-v0.2.10.so
+dist/agy-identity-bridge-v0.2.11.so
 ```
 
 The GitHub Actions workflow builds and packages:
 
 ```text
-agy-identity-bridge_0.2.10_linux_amd64.zip
+agy-identity-bridge_0.2.11_linux_amd64.zip
 checksums.txt
 ```
 

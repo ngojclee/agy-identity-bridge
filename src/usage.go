@@ -14,19 +14,19 @@ import (
 )
 
 type usageRecord struct {
-	At                time.Time
-	Provider          string
-	Model             string
-	ClientApp         string
-	Principal         string
-	Mode              string
-	PromptTokens      int64
-	CompletionTokens  int64
-	TotalTokens       int64
-	InputTokens       int64
-	OutputTokens      int64
-	CachedTokens      int64
-	CacheHit          bool
+	At               time.Time
+	Provider         string
+	Model            string
+	ClientApp        string
+	Principal        string
+	Mode             string
+	PromptTokens     int64
+	CompletionTokens int64
+	TotalTokens      int64
+	InputTokens      int64
+	OutputTokens     int64
+	CachedTokens     int64
+	CacheHit         bool
 }
 
 type usageTotals struct {
@@ -673,7 +673,7 @@ func recordUsageFromExecutorResponse(body []byte, headers map[string][]string, p
 	}
 	recordUsageObservation(usageRecord{
 		At:               time.Now().UTC(),
-		Provider:         provider,
+		Provider:         canonicalUsageProviderName(provider),
 		Model:            model,
 		ClientApp:        clientApp,
 		Principal:        principal,
@@ -686,6 +686,213 @@ func recordUsageFromExecutorResponse(body []byte, headers map[string][]string, p
 		CachedTokens:     totals.CachedTokens,
 		CacheHit:         totals.CacheHit,
 	})
+}
+
+// canonicalUsageProviderName collapses presentation-only duplication without
+// changing the executor key used by CPA. This protects the plugin dashboard
+// from records emitted by older plugin builds or external consumers that join
+// the provider and label with a hyphen.
+func canonicalUsageProviderName(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.TrimSuffix(value, " executor")
+	value = normalizeExecutorProviderKey(value)
+	return value
+}
+
+func usageShareMetric(group usageGroup, summary usageSummary) (float64, string) {
+	denominator := summary.TotalTokens
+	value := group.TotalTokens
+	label := formatUsageNumber(group.TotalTokens) + " tokens"
+	if denominator <= 0 {
+		denominator = summary.Requests
+		value = group.Requests
+		label = formatUsageNumber(group.Requests) + " requests"
+	}
+	if denominator <= 0 {
+		return 0, label
+	}
+	return float64(value) * 100 / float64(denominator), label
+}
+
+func usagePercent(value, total int64) string {
+	if total <= 0 {
+		return "0.0%"
+	}
+	return fmt.Sprintf("%.1f%%", float64(value)*100/float64(total))
+}
+
+func usageFilterLabel(filter usageFilter) string {
+	period := "Current month"
+	if filter.Period == "all_time" {
+		period = "All time"
+	}
+	bucket := "By hour"
+	if filter.Bucket == "day" {
+		bucket = "By day"
+	}
+	source := "All sources"
+	if filter.Source != "" && filter.Source != "all" {
+		source = filter.Source
+	}
+	return period + " / " + bucket + " / " + source
+}
+
+func renderUsageFilterForm(data usagePageData, action, prefix string) string {
+	return fmt.Sprintf(`<form class="usage-filters" method="get" action="%s">
+<label><span>Period</span><select id="%s-period" name="period">
+<option value="current_month"%s>Current month</option><option value="all_time"%s>All time</option>
+</select></label>
+<label><span>Bucket</span><select id="%s-bucket" name="bucket">
+<option value="hour"%s>By hour</option><option value="day"%s>By day</option>
+</select></label>
+<label><span>Source</span><select id="%s-source" name="source">%s</select></label>
+<button class="btn" type="submit">Apply</button>
+</form>`,
+		html.EscapeString(action),
+		html.EscapeString(prefix),
+		usageSelected(data.Filters.Period, "current_month"),
+		usageSelected(data.Filters.Period, "all_time"),
+		html.EscapeString(prefix),
+		usageSelected(data.Filters.Bucket, "hour"),
+		usageSelected(data.Filters.Bucket, "day"),
+		html.EscapeString(prefix),
+		renderSourceOptions(data.Filters.Source, data.AvailableSource),
+	)
+}
+
+func renderUsageShareRows(groups []usageGroup, summary usageSummary, limit int) string {
+	if len(groups) == 0 {
+		return `<div class="usage-empty">No usage records match the current filter.</div>`
+	}
+	if limit > 0 && len(groups) > limit {
+		groups = groups[:limit]
+	}
+	var builder strings.Builder
+	for _, group := range groups {
+		percentage, metric := usageShareMetric(group, summary)
+		builder.WriteString(fmt.Sprintf(
+			`<div class="share-row"><div class="share-row-head"><strong>%s</strong><span>%s</span></div><div class="share-bar"><span style="width:%.1f%%"></span></div><div class="share-meta"><span>%s calls</span><span>%s</span></div></div>`,
+			html.EscapeString(group.Label),
+			html.EscapeString(fmt.Sprintf("%.1f%%", percentage)),
+			percentage,
+			formatUsageNumber(group.Requests),
+			html.EscapeString(metric),
+		))
+	}
+	return builder.String()
+}
+
+func renderUsageBucketRows(buckets []usageBucket, limit int) string {
+	if len(buckets) == 0 {
+		return `<div class="usage-empty">No usage records match the current filter.</div>`
+	}
+	if limit > 0 && len(buckets) > limit {
+		buckets = buckets[len(buckets)-limit:]
+	}
+	var builder strings.Builder
+	for _, bucket := range buckets {
+		builder.WriteString(fmt.Sprintf(
+			`<div class="bucket-row"><span>%s</span><strong>%s</strong><small>%s tokens / %d hits</small></div>`,
+			html.EscapeString(bucket.Label),
+			formatUsageNumber(bucket.Requests),
+			formatUsageNumber(bucket.TotalTokens),
+			bucket.CacheHits,
+		))
+	}
+	return builder.String()
+}
+
+func renderUsageRecentRows(records []usageViewRecord, limit int) string {
+	if len(records) == 0 {
+		return `<div class="usage-empty">No usage records match the current filter.</div>`
+	}
+	if limit > 0 && len(records) > limit {
+		records = records[:limit]
+	}
+	var builder strings.Builder
+	for _, record := range records {
+		cache := ""
+		if record.CacheHit {
+			cache = `<span class="usage-tag">cache hit</span>`
+		}
+		builder.WriteString(fmt.Sprintf(
+			`<div class="recent-row"><div><strong>%s</strong><small>%s · %s · %s</small></div><div class="recent-value"><strong>%s</strong><small>%s %s</small></div></div>`,
+			html.EscapeString(firstNonEmpty(record.Model, "unknown")),
+			html.EscapeString(firstNonEmpty(record.ClientApp, "unknown")),
+			html.EscapeString(record.Mode),
+			html.EscapeString(record.At),
+			formatUsageNumber(record.TotalTokens),
+			formatUsageNumber(record.PromptTokens),
+			cache,
+		))
+	}
+	return builder.String()
+}
+
+func renderUsageMainHTML(data usagePageData, action string) string {
+	cacheRate := usagePercent(data.Summary.CacheHits, data.Summary.Requests)
+	return fmt.Sprintf(`<section class="card usage-overview">
+<div class="card-head"><div><div class="section-title">Usage analytics</div><div class="muted">Passive usage returned by agy2api · %s</div></div><span class="pill">%s</span></div>
+%s
+<div class="usage-metrics">
+<div class="usage-metric"><span>Requests</span><strong>%d</strong></div>
+<div class="usage-metric"><span>Total tokens</span><strong>%s</strong></div>
+<div class="usage-metric"><span>Prompt / output</span><strong>%s / %s</strong></div>
+<div class="usage-metric"><span>Cached tokens</span><strong>%s</strong></div>
+<div class="usage-metric"><span>Cache hit rate</span><strong>%s</strong></div>
+<div class="usage-metric"><span>Models / apps</span><strong>%d / %d</strong></div>
+</div>
+</section>
+<div class="usage-analysis-grid">
+<section class="card usage-panel"><div class="card-head"><div><div class="section-title">Model usage share</div><div class="muted">Share is token-based when usage totals exist, otherwise request-based.</div></div><span class="mini-pill">%d models</span></div><div class="share-list">%s</div></section>
+<section class="card usage-panel"><div class="card-head"><div><div class="section-title">Traffic by client</div><div class="muted">Which CPA-facing app is using the bridge.</div></div><span class="mini-pill">%d sources</span></div><div class="share-list">%s</div></section>
+<section class="card usage-panel"><div class="card-head"><div><div class="section-title">Recent usage</div><div class="muted">Latest observations retained by the plugin.</div></div><span class="mini-pill">last %d</span></div><div class="recent-list">%s</div></section>
+<section class="card usage-panel"><div class="card-head"><div><div class="section-title">Activity buckets</div><div class="muted">Request volume across the selected period.</div></div><span class="mini-pill">%s</span></div><div class="bucket-list">%s</div></section>
+</div>`,
+		html.EscapeString(usageFilterLabel(data.Filters)),
+		html.EscapeString(firstNonEmpty(data.Diagnostics.ReplacementMode, "unknown")),
+		renderUsageFilterForm(data, action, "main"),
+		data.Summary.Requests,
+		formatUsageNumber(data.Summary.TotalTokens),
+		formatUsageNumber(data.Summary.PromptTokens),
+		formatUsageNumber(data.Summary.CompletionTokens),
+		formatUsageNumber(data.Summary.CachedTokens),
+		cacheRate,
+		data.Summary.ModelCount,
+		data.Summary.SourceCount,
+		data.Summary.ModelCount,
+		renderUsageShareRows(data.TopModels, data.Summary, 8),
+		data.Summary.SourceCount,
+		renderUsageShareRows(data.TopSources, data.Summary, 6),
+		minInt(len(data.Recent), 6),
+		renderUsageRecentRows(data.Recent, 6),
+		html.EscapeString(firstNonEmpty(data.Filters.Bucket, "hour")),
+		renderUsageBucketRows(data.Buckets, 6),
+	)
+}
+
+func renderUsageDrawerHTML(data usagePageData, action string) string {
+	cacheRate := usagePercent(data.Summary.CacheHits, data.Summary.Requests)
+	return fmt.Sprintf(`<div class="drawer-usage-summary"><div class="section-title">Usage snapshot</div><div class="muted">%s</div><div class="drawer-usage-metrics"><span><strong>%d</strong> requests</span><span><strong>%s</strong> tokens</span><span><strong>%s</strong> cache rate</span></div></div>
+%s
+<details class="accordion" open><summary>Model usage share <span class="mini-pill">%d</span></summary><div class="accordion-body"><div class="share-list">%s</div></div></details>
+<details class="accordion"><summary>Traffic by client <span class="mini-pill">%d</span></summary><div class="accordion-body"><div class="share-list">%s</div></div></details>
+<details class="accordion"><summary>Recent usage <span class="mini-pill">%d</span></summary><div class="accordion-body"><div class="recent-list">%s</div></div></details>
+<details class="accordion"><summary>Activity buckets <span class="mini-pill">%d</span></summary><div class="accordion-body"><div class="bucket-list">%s</div></div></details>`,
+		html.EscapeString(usageFilterLabel(data.Filters)),
+		data.Summary.Requests,
+		formatUsageNumber(data.Summary.TotalTokens),
+		cacheRate,
+		renderUsageFilterForm(data, action, "drawer"),
+		data.Summary.ModelCount,
+		renderUsageShareRows(data.TopModels, data.Summary, 12),
+		data.Summary.SourceCount,
+		renderUsageShareRows(data.TopSources, data.Summary, 12),
+		minInt(len(data.Recent), 12),
+		renderUsageRecentRows(data.Recent, 12),
+		len(data.Buckets),
+		renderUsageBucketRows(data.Buckets, 12),
+	)
 }
 
 func usageRoutePage(diag providerDiagnostics, query url.Values) string {

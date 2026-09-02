@@ -30,7 +30,11 @@ func ensureAuthRecord(spec providerSpec, settings PluginSettings) error {
 	if spec.upstreamBaseURL() == "" || spec.primaryAPIKey() == "" {
 		return fmt.Errorf("mirrored provider missing base_url or api_key, cannot create auth record")
 	}
-	fingerprint := settings.ExecutorProvider + "\x00" + spec.upstreamBaseURL() + "\x00" +
+	provider := normalizeExecutorProviderKey(settings.ExecutorProvider)
+	if provider == "" {
+		provider = defaultExecutorProvider
+	}
+	fingerprint := provider + "\x00" + spec.upstreamBaseURL() + "\x00" +
 		spec.primaryAPIKey() + "\x00" + modelNamespace(settings.ModelNamespace, spec.Prefix)
 	executorAuthRecordState.Lock()
 	defer executorAuthRecordState.Unlock()
@@ -42,7 +46,7 @@ func ensureAuthRecord(spec providerSpec, settings PluginSettings) error {
 		return errMarshal
 	}
 	saveRequest := map[string]any{
-		"name": settings.ExecutorProvider + ".json",
+		"name": provider + ".json",
 		"json": json.RawMessage(authJSON),
 	}
 	_, errCall := hostCall(pluginabi.MethodHostAuthSave, saveRequest)
@@ -69,12 +73,17 @@ func executorAuthRecordEnsured() bool {
 }
 
 func executorAuthJSON(spec providerSpec, settings PluginSettings) ([]byte, error) {
+	provider := normalizeExecutorProviderKey(settings.ExecutorProvider)
+	if provider == "" {
+		provider = defaultExecutorProvider
+	}
 	authJSON, errMarshal := json.Marshal(map[string]any{
-		"type":     settings.ExecutorProvider,
+		"type":     provider,
 		"base_url": spec.upstreamBaseURL(),
 		"api_key":  spec.primaryAPIKey(),
-		"label":    "ln.Antigravity executor",
-		"prefix":   modelNamespace(settings.ModelNamespace, spec.Prefix),
+		// The executor provider is already the canonical identity. Do not add
+		// a duplicate label: usage consumers may join type and label.
+		"prefix": modelNamespace(settings.ModelNamespace, spec.Prefix),
 	})
 	if errMarshal != nil {
 		return nil, fmt.Errorf("marshal auth record: %w", errMarshal)
