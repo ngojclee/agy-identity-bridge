@@ -20,7 +20,12 @@ func TestProviderEditorHTMLHasManagementKeyGateAndProviderControls(t *testing.T)
 		"Request headers",
 		"Custom models",
 		"Fetch from endpoint",
-		"Test all",
+		"Test all keys",
+		"Select a model to test",
+		"Select models from endpoint",
+		"notice-bar",
+		"AGY_PLUGIN_SECRET",
+		"drawer-close",
 		"Save",
 		"/v0/management/plugins/agy-identity-bridge",
 	} {
@@ -224,5 +229,33 @@ func TestParseOpenAIModelsSortsAndDeduplicatesIDs(t *testing.T) {
 	models := parseOpenAIModels([]byte(`{"data":[{"id":"b"},{"id":"a"},{"id":"a"},{"id":""}]}`))
 	if strings.Join(models, ",") != "a,b" {
 		t.Fatalf("models = %+v", models)
+	}
+}
+
+func TestEditorTestModelStripsProviderPrefixBeforeUpstream(t *testing.T) {
+	settings := decodePluginSettings([]byte(mirrorConfigYAML))
+	spec := providerSpec{
+		Name:   "Antigravity",
+		Prefix: "agy",
+		Models: []modelSpec{{Name: "gemini-3.7-flash-high"}},
+	}
+	payload := providerEditorPayload{TestModel: "agy/gemini-3.7-flash-high"}
+	model := editorTestModel(payload, spec)
+	if got := stripModelPrefix(model, settingsModelPrefix(settings, spec)); got != "gemini-3.7-flash-high" {
+		t.Fatalf("test model sent upstream as %q", got)
+	}
+}
+
+func TestEditorProviderAPIKeysKeepsConfiguredKeysAndAddsNewKeys(t *testing.T) {
+	current := providerSpec{APIKeys: []string{"configured-key"}}
+	payload := providerEditorPayload{
+		APIKeyRows: []providerEditorAPIKeyRow{
+			{Existing: true},
+			{Value: "new-key"},
+		},
+	}
+	keys := editorProviderAPIKeys(payload, current)
+	if len(keys) != 2 || keys[0] != "configured-key" || keys[1] != "new-key" {
+		t.Fatalf("resolved API keys = %+v", keys)
 	}
 }

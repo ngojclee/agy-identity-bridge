@@ -52,7 +52,7 @@ func currentModelResponse() modelRegistrationResponse {
 	}
 	return modelRegistrationResponse{
 		Provider: settings.ExecutorProvider,
-		Models:   spec.modelInfos(settings.ModelNamespace),
+		Models:   spec.modelInfosForRegistration(settings.ModelNamespace),
 	}
 }
 

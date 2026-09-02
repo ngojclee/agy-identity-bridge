@@ -814,23 +814,11 @@ func modelIDsFromInfos(values []modelInfo) []string {
 }
 
 func publishedModelIDs(spec providerSpec, settings PluginSettings) []string {
-	infos := spec.modelInfos(settings.ModelNamespace)
+	infos := spec.modelInfosForRegistration(settings.ModelNamespace)
 	if len(infos) == 0 || !canServeModels(settings, spec) {
 		return nil
 	}
-	prefix := modelNamespace(settings.ModelNamespace, spec.Prefix)
-	if prefix == "" {
-		return nil
-	}
-	out := make([]string, 0, len(infos))
-	for _, item := range infos {
-		id := strings.TrimSpace(item.ID)
-		if id == "" {
-			continue
-		}
-		out = append(out, prefix+"/"+id)
-	}
-	return uniqueStrings(out)
+	return modelIDsFromInfos(infos)
 }
 
 func maxInt(left, right int) int {

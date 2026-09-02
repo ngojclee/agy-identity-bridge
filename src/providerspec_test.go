@@ -152,16 +152,16 @@ func TestModelRegistrationLeavesPrefixToCPA(t *testing.T) {
 	loadMirror(t)
 	root, _ := parseYAMLMap([]byte(mirrorConfigYAML))
 	spec, _ := extractProviderSpec(root, currentPluginSettings())
-	infos := spec.modelInfos("")
+	infos := spec.modelInfosForRegistration("")
 	if len(infos) == 0 {
 		t.Fatal("no models")
 	}
 	for _, info := range infos {
-		if strings.Contains(info.ID, "/") {
-			t.Fatalf("model registration must leave prefix to CPA, got %+v", info)
+		if !strings.HasPrefix(info.ID, "agy/") {
+			t.Fatalf("model registration must include provider prefix, got %+v", info)
 		}
-		if info.DisplayName != info.ID {
-			t.Fatalf("display name drifted from id: %+v", info)
+		if strings.Count(info.ID, "/") != 1 {
+			t.Fatalf("model registration duplicated provider prefix, got %+v", info)
 		}
 	}
 }
@@ -279,8 +279,11 @@ func TestExecutorWithholdsModelsWhileMirroredProviderIsLive(t *testing.T) {
 		t.Fatalf("namespaced model count = %d, want 3", len(served.Models))
 	}
 	for _, model := range served.Models {
-		if strings.Contains(model.ID, "/") {
-			t.Fatalf("model registration must leave namespace prefix to CPA, got %q", model.ID)
+		if !strings.HasPrefix(model.ID, "spike./") {
+			t.Fatalf("model registration must include namespace prefix, got %q", model.ID)
+		}
+		if strings.Count(model.ID, "/") != 1 {
+			t.Fatalf("model registration duplicated namespace prefix, got %q", model.ID)
 		}
 	}
 }

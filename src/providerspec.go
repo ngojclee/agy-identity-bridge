@@ -249,11 +249,8 @@ func canServeModels(settings PluginSettings, spec providerSpec) bool {
 
 // modelInfos reproduces CLIProxyAPI's own model metadata mapping: alias wins
 // over name, image models switch type, and a chat model without explicit
-// thinking still advertises the three standard levels.
-//
-// The returned IDs intentionally do not include the provider prefix. CPA adds
-// the auth record's prefix while registering the client. Including it here
-// would make the live model ID become "agy/agy/<model>".
+// thinking still advertises the three standard levels. These are the bare
+// provider model IDs used for editing and upstream requests.
 func (s providerSpec) modelInfos(namespace string) []modelInfo {
 	created := time.Now().Unix()
 	out := make([]modelInfo, 0, len(s.Models))
@@ -287,6 +284,25 @@ func (s providerSpec) modelInfos(namespace string) []modelInfo {
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// modelInfosForRegistration returns the IDs that the plugin host actually
+// registers in CPA's global model registry. Executor plugins are registered
+// directly by pluginhost and do not receive the auth record prefix
+// automatically.
+func (s providerSpec) modelInfosForRegistration(namespace string) []modelInfo {
+	out := s.modelInfos(namespace)
+	prefix := modelNamespace(namespace, s.Prefix)
+	if prefix == "" {
+		return out
+	}
+	for index := range out {
+		if out[index].ID == "" {
+			continue
+		}
+		out[index].ID = prefix + "/" + out[index].ID
+	}
 	return out
 }
 

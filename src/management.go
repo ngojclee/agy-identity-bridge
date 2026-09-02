@@ -491,11 +491,23 @@ type providerEditorPayload struct {
 	HMACSecret                         string                    `json:"hmac_secret"`
 	Agy2apiIdentitySecret              string                    `json:"agy2api_identity_secret"`
 	HMACSecretSource                   string                    `json:"hmac_secret_source"`
+	TestModel                          string                    `json:"test_model"`
+	TestAPIKeyIndex                    int                       `json:"test_api_key_index"`
 }
 
 type providerEditorAPIKeyRow struct {
 	Existing bool   `json:"existing"`
 	Value    string `json:"value"`
+}
+
+type providerTestResult struct {
+	Index      int    `json:"index"`
+	Label      string `json:"label"`
+	OK         bool   `json:"ok"`
+	HTTPStatus int    `json:"http_status"`
+	Model      string `json:"model,omitempty"`
+	Endpoint   string `json:"endpoint,omitempty"`
+	Error      string `json:"error,omitempty"`
 }
 
 func currentProviderEditorData(diagnostics providerDiagnostics, exposeConfig bool) providerEditorData {
@@ -616,10 +628,10 @@ func providerEditorHTML(data providerEditorData) string {
 <style>
 :root{--bg:#f7f5ef;--panel:#fffdfa;--surface:#f0ede5;--inset:#f8f6f1;--ink:#282521;--ink-2:#69635b;--ink-3:#9b948b;--line:#dfdacf;--line-2:#cfc8bb;--accent:#2563eb;--success:#0f766e;--success-bg:#ccfbf1;--warn:#9a5a00;--warn-bg:#fff0bf;--error:#b44232;--error-bg:#fbe3df;--radius:8px;--shadow:0 1px 2px #00000014}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;font-size:14px;line-height:1.45;overflow-x:hidden}button,input,textarea,select{font:inherit}
-.shell{min-height:100vh;position:relative}.content{padding:22px 24px 30px;max-width:100%%}.drawer{position:fixed;top:0;right:0;bottom:0;width:min(760px,calc(100vw - 32px));background:var(--panel);border-left:1px solid var(--line);box-shadow:-8px 0 24px #00000016;transform:translateX(100%%);transition:transform .24s ease,box-shadow .24s ease;z-index:30;display:flex;flex-direction:column}.drawer-head{height:58px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px;flex:0 0 auto}.drawer-title{font-size:15px;font-weight:700}.drawer-body{padding:14px 16px 24px;overflow:auto;flex:1 1 auto}.drawer-rail{position:fixed;top:50%%;right:0;transform:translateY(-50%%);z-index:31}.drawer-rail button{border:1px solid var(--line-2);border-right:0;background:var(--panel);color:var(--ink);height:48px;padding:0 12px 0 10px;border-radius:8px 0 0 8px;box-shadow:-4px 0 12px #00000010;cursor:pointer;font-weight:700;letter-spacing:0}.drawer-rail button:hover{background:#fff}.drawer-open .drawer{transform:translateX(0)}.drawer-open .drawer-rail{display:none}.top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.title h1{font-size:20px;line-height:1.2;margin:0 0 4px;font-weight:700;letter-spacing:0}.muted{color:var(--ink-2);font-size:12.5px}.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-bottom:10px}.section-title{font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);margin-bottom:10px}.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.metric{background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:10px}.metric span{display:block;color:var(--ink-3);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}.metric strong{display:block;margin-top:3px;font-weight:700;word-break:break-word}.pill{display:inline-flex;align-items:center;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);padding:4px 9px;font-size:12px;font-weight:700;color:var(--ink-2)}.pill.ok{background:var(--success-bg);border-color:#5eead4;color:var(--success)}.pill.warn{background:var(--warn-bg);border-color:#f6d365;color:var(--warn)}.pill.err{background:var(--error-bg);border-color:#f0a79d;color:var(--error)}
-.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.btn{border:1px solid var(--line-2);background:#fff;color:var(--ink);border-radius:6px;height:34px;padding:0 11px;font-weight:650;font-size:13px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.btn:hover{filter:brightness(.985)}.btn:disabled{opacity:.5;cursor:not-allowed}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.field{margin-bottom:12px}.field label{display:block;font-size:12px;color:var(--ink-2);font-weight:650;margin-bottom:5px}.field input,.field textarea,.field select{width:100%%;border:1px solid var(--line-2);background:#fff;border-radius:6px;color:var(--ink);padding:8px 9px;outline:none}.field textarea{resize:vertical;min-height:74px;font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:12px}.toggle{display:flex;align-items:center;gap:9px;background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:9px;margin-bottom:8px}.toggle input{width:16px;height:16px}.toggle span{font-weight:650}.notice{background:var(--warn-bg);border:1px solid #f6d365;color:var(--warn);border-radius:6px;padding:10px;margin-bottom:10px}.result{display:none;white-space:pre-wrap;word-break:break-word;border-radius:6px;padding:10px;margin-top:10px;background:#22221f;color:#eceae5;font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:12px;max-height:230px;overflow:auto}.chips{display:flex;gap:7px;flex-wrap:wrap}.chip{background:var(--surface);border:1px solid var(--line-2);border-radius:999px;padding:5px 9px;font-size:12px;font-weight:650}.log{max-height:220px;overflow:auto;background:#22221f;color:#eceae5;border-radius:6px;padding:10px;font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:12px}.event{padding:3px 0}.danger{color:var(--error)}.hidden{display:none!important}
+.shell{min-height:100vh;position:relative}.content{padding:22px 24px 30px;max-width:100%%}.drawer{position:fixed;top:0;right:0;bottom:0;width:min(780px,calc(100vw - 32px));background:var(--panel);border-left:1px solid var(--line);box-shadow:-8px 0 24px #00000016;transform:translateX(100%%);transition:transform .24s ease,box-shadow .24s ease;z-index:30;display:flex;flex-direction:column}.drawer-head{height:58px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px;flex:0 0 auto}.drawer-head-right{display:flex;align-items:center;gap:10px}.drawer-title{font-size:15px;font-weight:700}.drawer-body{padding:16px 18px 28px;overflow:auto;flex:1 1 auto}.drawer-rail{position:fixed;right:16px;bottom:16px;z-index:31}.drawer-rail button{border:1px solid var(--line-2);background:var(--panel);color:var(--ink);height:40px;padding:0 12px;border-radius:8px;box-shadow:var(--shadow);cursor:pointer;font-weight:700;letter-spacing:0}.drawer-rail button:hover{background:#fff}.drawer-open .drawer{transform:translateX(0)}.drawer-open .drawer-rail{display:none}.top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.title h1{font-size:20px;line-height:1.2;margin:0 0 4px;font-weight:700;letter-spacing:0}.muted{color:var(--ink-2);font-size:12.5px}.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:14px;margin-bottom:12px}.section-title{font-size:11px;font-weight:750;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);margin-bottom:10px}.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric{background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:10px}.metric span{display:block;color:var(--ink-3);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;text-align:left}.metric strong{display:block;margin-top:3px;font-weight:700;word-break:break-word;text-align:right;font-variant-numeric:tabular-nums}.pill{display:inline-flex;align-items:center;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);padding:4px 9px;font-size:12px;font-weight:700;color:var(--ink-2)}.pill.ok{background:var(--success-bg);border-color:#5eead4;color:var(--success)}.pill.warn{background:var(--warn-bg);border-color:#f6d365;color:var(--warn)}.pill.err{background:var(--error-bg);border-color:#f0a79d;color:var(--error)}
+.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.actions.end{justify-content:flex-end}.btn{border:1px solid var(--line-2);background:#fff;color:var(--ink);border-radius:6px;height:34px;padding:0 11px;font-weight:650;font-size:13px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.btn:hover{filter:brightness(.985)}.btn:disabled{opacity:.5;cursor:not-allowed}.icon-btn{width:30px;height:30px;padding:0;border:0;background:transparent;color:var(--ink-2);border-radius:5px;font-size:19px;line-height:1}.icon-btn:hover{background:var(--surface);color:var(--ink)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{margin-bottom:14px}.field label{display:block;font-size:12px;color:var(--ink-2);font-weight:650;margin-bottom:5px}.field-help{margin-top:-7px;margin-bottom:12px;color:var(--ink-2);font-size:11.5px;line-height:1.45}.field input,.field textarea,.field select{width:100%%;border:1px solid var(--line-2);background:#fff;border-radius:6px;color:var(--ink);padding:8px 9px;outline:none}.field textarea{resize:vertical;min-height:74px;font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:12px}.toggle{display:flex;align-items:center;gap:9px;background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:9px;margin-bottom:10px}.toggle input{width:16px;height:16px}.toggle span{font-weight:650}.notice{background:var(--warn-bg);border:1px solid #f6d365;color:var(--warn);border-radius:6px;padding:10px;margin-bottom:10px}.notice-bar{display:none;margin:10px 0 12px;border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:12px;font-weight:650}.notice-bar.show{display:block}.notice-bar.ok{background:var(--success-bg);border-color:#5eead4;color:var(--success)}.notice-bar.warn{background:var(--warn-bg);border-color:#f6d365;color:var(--warn)}.notice-bar.err{background:var(--error-bg);border-color:#f0a79d;color:var(--error)}.result{display:none;white-space:pre-wrap;word-break:break-word;border-radius:6px;padding:10px;margin-top:12px;background:#22221f;color:#eceae5;font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:12px;max-height:230px;overflow:auto}.chips{display:flex;gap:7px;flex-wrap:wrap}.chip{background:var(--surface);border:1px solid var(--line-2);border-radius:999px;padding:5px 9px;font-size:12px;font-weight:650}.log{max-height:220px;overflow:auto;background:#22221f;color:#eceae5;border-radius:6px;padding:10px;font-family:ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;font-size:12px}.event{padding:3px 0}.danger{color:var(--error)}.hidden{display:none!important}
 .drawer-tabs{display:flex;gap:4px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--inset)}.drawer-tab{flex:1;border:1px solid transparent;background:transparent;color:var(--ink-2);border-radius:6px;height:34px;padding:0 10px;font-size:12px;font-weight:700;cursor:pointer}.drawer-tab.active{background:#fff;border-color:var(--line-2);color:var(--ink);box-shadow:var(--shadow)}.drawer-pane.hidden{display:none!important}.card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}.usage-overview{margin-top:10px}.usage-filters{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:10px;align-items:end;margin:12px 0}.usage-filters label{display:block}.usage-filters label span{display:block;font-size:11px;color:var(--ink-2);font-weight:700;margin-bottom:5px}.usage-filters select{width:100%%;height:34px;border:1px solid var(--line-2);background:#fff;border-radius:6px;padding:0 9px;color:var(--ink)}.usage-metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}.usage-metric{background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:10px;min-width:0}.usage-metric span{display:block;color:var(--ink-3);font-size:10px;font-weight:750;text-transform:uppercase;letter-spacing:.04em}.usage-metric strong{display:block;margin-top:4px;font-size:15px;word-break:break-word}.usage-analysis-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:10px}.usage-panel{min-width:0}.usage-panel .card-head{min-height:34px}.share-list{display:flex;flex-direction:column;gap:11px}.share-row{min-width:0}.share-row-head,.share-meta{display:flex;justify-content:space-between;gap:10px;align-items:baseline}.share-row-head strong{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.share-row-head span,.share-meta{font-size:11px;color:var(--ink-2)}.share-bar{height:7px;margin-top:5px;border-radius:999px;background:var(--surface);overflow:hidden}.share-bar span{display:block;height:100%%;min-width:2px;border-radius:999px;background:var(--accent)}.share-row:nth-child(3n+2) .share-bar span{background:#0f766e}.share-row:nth-child(3n+3) .share-bar span{background:#d97706}.share-meta{margin-top:3px}.bucket-list,.recent-list{display:flex;flex-direction:column;gap:0}.bucket-row,.recent-row{display:flex;justify-content:space-between;gap:10px;align-items:center;border-bottom:1px solid var(--line);padding:8px 0}.bucket-row:last-child,.recent-row:last-child{border-bottom:0}.bucket-row span,.bucket-row small,.recent-row small{color:var(--ink-2);font-size:11px}.bucket-row strong,.recent-row strong{font-size:12px}.recent-row>div:first-child{min-width:0}.recent-row>div:first-child strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.recent-row>div:first-child small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.recent-value{text-align:right;flex:0 0 auto}.recent-value small{display:block}.usage-tag{display:inline-flex;border-radius:999px;background:var(--success-bg);color:var(--success);padding:2px 6px;font-size:10px}.usage-empty{color:var(--ink-3);font-size:12px;border:1px dashed var(--line-2);border-radius:6px;padding:10px}.drawer-usage-summary{background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:11px;margin-bottom:10px}.drawer-usage-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:10px}.drawer-usage-metrics span{background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px;font-size:11px;color:var(--ink-2)}.drawer-usage-metrics strong{display:block;color:var(--ink);font-size:14px}.usage-drawer-filters{margin-bottom:10px}
-.accordion{border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow);margin-top:10px;overflow:hidden}.accordion summary{cursor:pointer;list-style:none;padding:12px 14px;font-weight:700;color:var(--ink);display:flex;align-items:center;justify-content:space-between;gap:10px}.accordion summary::-webkit-details-marker{display:none}.accordion summary::after,.rowcard summary::after{content:"";width:8px;height:8px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .18s ease, opacity .18s ease;opacity:.6;flex:0 0 auto}.accordion[open] summary::after,.rowcard[open] summary::after{transform:rotate(-135deg);opacity:.9}.accordion-body{padding:0 14px 14px}.rowlist{display:flex;flex-direction:column;gap:8px;margin-top:10px}.rowcard{border:1px solid var(--line);border-radius:8px;background:var(--inset);overflow:hidden}.rowcard summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;font-weight:700;color:var(--ink)}.rowcard summary::-webkit-details-marker{display:none}.rowcard-main{min-width:0;display:flex;flex-direction:column;gap:2px}.rowcard-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.rowcard-title strong{font-size:13px;min-width:0}.rowcard-sub{font-size:11px;font-weight:650;color:var(--ink-2);word-break:break-word}.rowcard-tools{display:flex;align-items:center;gap:8px;flex:0 0 auto}.row-badges{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}.row-badge{display:inline-flex;align-items:center;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);padding:3px 8px;font-size:11px;font-weight:700;color:var(--ink-2)}.row-badge.image{background:#eef2ff;border-color:#c7d2fe;color:#4338ca}.row-badge.thinking{background:#fff7ed;border-color:#fed7aa;color:#9a3412}.row-body{padding:0 12px 12px;border-top:1px solid var(--line);background:#fff}.rowgrid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto auto;gap:8px;align-items:end}.rowgrid.cols-3{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto}.rowgrid .field{margin-bottom:0}.mini-pill{display:inline-flex;align-items:center;min-width:22px;justify-content:center;padding:2px 6px;border-radius:999px;background:var(--surface);border:1px solid var(--line-2);font-size:11px;font-weight:700;color:var(--ink-2)}.muted.small{font-size:12px;color:var(--ink-2)}.model-think{margin-top:10px;border-top:1px solid var(--line);padding-top:10px}.think-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.think-pill{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:#fff;font-size:12px}.think-pill span{display:flex;flex-direction:column;gap:2px}.think-pill small{font-size:10px;color:var(--ink-3);text-transform:lowercase;letter-spacing:.04em}.think-pill input{width:16px;height:16px}
+.accordion{border:1px solid var(--line);border-radius:8px;background:var(--panel);box-shadow:var(--shadow);margin-top:12px;overflow:hidden}.accordion summary{cursor:pointer;list-style:none;padding:13px 14px;font-weight:700;color:var(--ink);display:flex;align-items:center;justify-content:space-between;gap:10px}.accordion summary::-webkit-details-marker{display:none}.accordion summary .mini-pill{margin-left:auto}.accordion summary::after,.rowcard summary::after{content:"";width:8px;height:8px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .18s ease, opacity .18s ease;opacity:.6;flex:0 0 auto}.accordion[open] summary::after,.rowcard[open] summary::after{transform:rotate(-135deg);opacity:.9}.accordion-body{padding:0 14px 16px}.rowlist{display:flex;flex-direction:column;gap:12px;margin-top:12px}.rowcard{border:1px solid var(--line);border-radius:8px;background:var(--inset);overflow:hidden}.rowcard summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px;font-weight:700;color:var(--ink)}.rowcard summary::-webkit-details-marker{display:none}.rowcard-main{min-width:0;display:flex;flex-direction:column;gap:2px}.rowcard-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.rowcard-title strong{font-size:13px;min-width:0}.rowcard-sub{font-size:11px;font-weight:650;color:var(--ink-2);word-break:break-word}.rowcard-tools{display:flex;align-items:center;gap:8px;flex:0 0 auto;margin-left:auto}.row-badges{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}.row-badge{display:inline-flex;align-items:center;border-radius:999px;border:1px solid var(--line-2);background:var(--surface);padding:3px 8px;font-size:11px;font-weight:700;color:var(--ink-2)}.row-badge.image{background:#eef2ff;border-color:#c7d2fe;color:#4338ca}.row-badge.thinking{background:#fff7ed;border-color:#fed7aa;color:#9a3412}.row-badge.test-ok{background:var(--success-bg);border-color:#5eead4;color:var(--success)}.row-badge.test-err{background:var(--error-bg);border-color:#f0a79d;color:var(--error)}.row-body{padding:12px;border-top:1px solid var(--line);background:#fff}.rowgrid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto auto;gap:10px;align-items:end}.rowgrid.cols-3{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) auto}.rowgrid .field{margin-bottom:0}.mini-pill{display:inline-flex;align-items:center;min-width:22px;justify-content:center;padding:2px 6px;border-radius:999px;background:var(--surface);border:1px solid var(--line-2);font-size:11px;font-weight:700;color:var(--ink-2)}.muted.small{font-size:12px;color:var(--ink-2)}.model-think{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}.think-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.think-pill{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:#fff;font-size:12px}.think-pill span{display:flex;flex-direction:column;gap:2px}.think-pill small{font-size:10px;color:var(--ink-3);text-transform:lowercase;letter-spacing:.04em}.think-pill input{width:16px;height:16px}.picker{position:absolute;inset:0;background:var(--panel);z-index:2;padding:16px 18px 24px;overflow:auto}.picker-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}.picker-list{display:flex;flex-direction:column;gap:6px;margin-top:10px;max-height:min(56vh,560px);overflow:auto;padding-right:2px}.picker-row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--inset);border:1px solid var(--line);border-radius:6px;padding:9px 10px}.picker-row label{display:flex;gap:9px;align-items:center;min-width:0;font-size:12px;font-weight:650}.picker-row code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.picker-actions{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:14px}.test-model{min-width:220px;max-width:100%%}.save-actions{justify-content:flex-end;margin-top:16px;padding-top:2px}
 @media(max-width:1100px){.usage-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:900px){.grid{grid-template-columns:1fr}.content{padding:16px 14px 28px}.drawer{width:min(100vw,760px)}.drawer-body{padding:14px}.drawer-rail{top:auto;bottom:16px;transform:none}.drawer-rail button{height:40px}.usage-analysis-grid{grid-template-columns:1fr}.usage-filters{grid-template-columns:1fr 1fr}.usage-filters .btn{width:100%%}}
 @media(max-width:540px){.usage-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.usage-filters{grid-template-columns:1fr}.drawer-usage-metrics{grid-template-columns:1fr}}
@@ -641,25 +653,33 @@ func providerEditorHTML(data providerEditorData) string {
 </main>
 <div class="drawer-rail"><button id="drawer-rail-toggle" type="button">%s</button></div>
 <aside class="drawer">
-<div class="drawer-head"><div><div class="drawer-title">ln.Antigravity</div><div class="muted">Mirrored provider editor</div></div><span id="mode-pill" class="pill">%s</span></div>
+<div class="drawer-head"><div><div class="drawer-title">ln.Antigravity</div><div class="muted">Mirrored provider editor</div></div><div class="drawer-head-right"><span id="mode-pill" class="pill">%s</span><button class="icon-btn" id="drawer-close" type="button" aria-label="Close provider drawer" title="Close">×</button></div></div>
 <div class="drawer-tabs"><button class="drawer-tab active" type="button" data-pane="provider-pane">Provider</button><button class="drawer-tab" type="button" data-pane="usage-pane">Usage analytics</button></div>
+<div id="notice-bar" class="notice-bar" role="status" aria-live="polite"></div>
 <div class="drawer-body">
 <div id="provider-pane" class="drawer-pane">
 %s
 <div class="card"><div class="section-title">Management access</div><div class="field"><label for="mkey">CPA management key</label><input id="mkey" type="password" autocomplete="current-password" placeholder="Required for Load, Save, Test, Fetch"></div><div class="actions"><button class="btn" id="load-secure">Load secure config</button><button class="btn" id="clear-key">Clear</button></div></div>
+<div id="model-picker" class="picker hidden">
+<div class="picker-head"><div><div class="drawer-title">Select models from endpoint</div><div class="muted">Choose the models to add to this provider.</div></div><button class="icon-btn" id="picker-close" type="button" aria-label="Close model picker" title="Close">×</button></div>
+<div class="field"><label for="picker-search">Search models</label><input id="picker-search" type="search" placeholder="Filter by model name"></div>
+<div class="picker-actions"><label class="toggle"><input id="picker-select-all" type="checkbox"><span>Select all new models</span></label><span id="picker-count" class="muted">0 available</span></div>
+<div id="picker-list" class="picker-list"></div>
+<div class="picker-actions"><button class="btn" id="picker-cancel" type="button">Cancel</button><button class="btn primary" id="picker-apply" type="button">Add selected models</button></div>
+</div>
 <form id="editor-form" class="card">
 <div class="section-title">Source provider</div>
 <input type="hidden" id="original_name"><input type="hidden" id="original_prefix"><input type="hidden" id="original_base_url">
 <div class="grid"><div class="field"><label for="name">Name</label><input id="name"></div><div class="field"><label for="prefix">Prefix</label><input id="prefix" placeholder="agy"></div></div>
 <div class="field"><label for="base_url">Base URL</label><input id="base_url" placeholder="http://host:port/v1"></div>
-<div class="grid"><div class="field"><label for="priority">Priority</label><input id="priority" type="number"></div><div class="field"><label for="hmac_source">HMAC source</label><select id="hmac_source"><option value="env">env</option><option value="config">config</option><option value="provider_api_key">provider_api_key</option><option value="none">none</option></select></div></div>
+<div class="grid"><div class="field"><label for="priority">Priority</label><input id="priority" type="number"></div><div class="field"><label for="hmac_source">HMAC source</label><select id="hmac_source"><option value="env">env</option><option value="config">config</option><option value="provider_api_key">provider_api_key</option><option value="none">none</option></select><div class="field-help">Use <strong>env</strong> when CPA has <code>AGY_PLUGIN_SECRET</code>. Use <strong>config</strong> for the plugin HMAC field. The dedicated agy2api secret wins over both. <strong>none</strong> sends no signature and cannot authenticate to agy2api.</div></div></div>
 <label class="toggle"><input id="disabled" type="checkbox"><span>Disable original provider</span></label>
 <label class="toggle"><input id="disable_cooling" type="checkbox"><span>Disable cooling</span></label>
 
 <details class="accordion" open>
 <summary>API key entries <span id="api-key-count" class="mini-pill"></span></summary>
 <div class="accordion-body">
-<div class="actions"><button class="btn" type="button" id="add-key">+ Add key entry</button><button class="btn" type="button" id="test-provider">Test all</button></div>
+<div class="actions"><button class="btn" type="button" id="add-key">+ Add key entry</button><select id="test-model" class="test-model" aria-label="Model used for tests"><option value="">Select a model to test</option></select><button class="btn" type="button" id="test-provider">Test all keys</button></div>
 <div id="api-key-rows" class="rowlist"></div>
 </div>
 </details>
@@ -693,7 +713,7 @@ func providerEditorHTML(data providerEditorData) string {
 </div>
 </details>
 
-<div class="actions"><button class="btn primary" type="submit" id="save-provider">Save</button></div>
+<div class="actions save-actions"><button class="btn primary" type="submit" id="save-provider">Save</button></div>
 <div id="result" class="result"></div>
 </form>
 </div>
@@ -707,13 +727,15 @@ func providerEditorHTML(data providerEditorData) string {
 <script>
 let state = JSON.parse(document.getElementById('seed').textContent);
 const MGT = '/v0/management/plugins/%s';
-const ids = ['original_name','original_prefix','original_base_url','name','prefix','base_url','priority','disabled','disable_cooling','enabled','allow_explicit_client_identity_headers','principal_fallback_mode','debug_logging','api-key-rows','header-rows','model-rows','executor_enabled','executor_provider','model_namespace','agy_secret','hmac_secret','hmac_source'];
+const ids = ['original_name','original_prefix','original_base_url','name','prefix','base_url','priority','disabled','disable_cooling','enabled','allow_explicit_client_identity_headers','principal_fallback_mode','debug_logging','api-key-rows','header-rows','model-rows','executor_enabled','executor_provider','model_namespace','agy_secret','hmac_secret','hmac_source','test-model'];
 let drawerOpen = document.body.classList.contains('drawer-open');
+let fetchedModels = [];
 
 function el(id){ return document.getElementById(id); }
 function managementKey(){ return el('mkey').value.trim() || sessionStorage.getItem('agyBridgeManagementKey') || ''; }
 function mgmtHeaders(json){ const key = managementKey(); const headers = {}; if(json) headers['Content-Type'] = 'application/json'; if(key){ headers['X-Management-Key'] = key; headers['Authorization'] = 'Bearer ' + key; } return headers; }
 function show(value){ const out = el('result'); out.style.display = 'block'; out.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2); }
+function notice(message, tone){ const out = el('notice-bar'); if(!out) return; out.textContent = message; out.className = 'notice-bar show ' + (tone || 'ok'); }
 function esc(value){ return String(value ?? '').replace(/[&<>"']/g, ch=>{ switch(ch){ case '&': return '&amp;'; case '<': return '&lt;'; case '>': return '&gt;'; case '"': return '&quot;'; default: return '&#39;'; } }); }
 function maskPreview(value){ const text = String(value ?? '').trim(); if(!text) return 'Empty'; if(text.length <= 4) return text; if(text.length <= 8) return text.slice(0, 2) + '***' + text.slice(-2); return text.slice(0, 2) + '******' + text.slice(-2); }
 function setDrawer(open){ drawerOpen = !!open; document.body.classList.toggle('drawer-open', drawerOpen); document.body.classList.toggle('drawer-closed', !drawerOpen); const label = drawerOpen ? 'Close editor' : 'Open editor'; ['drawer-toggle','drawer-rail-toggle'].forEach(id=>{ const node = el(id); if(node) node.textContent = label; }); }
@@ -721,9 +743,25 @@ function setLocked(node, locked){ if(!node) return; if('disabled' in node){ node
 function updateKeySummary(node){ const input = node.querySelector('.api-key-value'); const preview = node.querySelector('.row-secret-preview'); if(!input || !preview) return; const text = input.value.trim(); const existing = node.dataset.existing === 'true'; preview.textContent = text ? maskPreview(text) : (existing ? 'Configured' : 'Empty'); }
 function updateModelSummary(node){ const nameInput = node.querySelector('.model-name'); const aliasInput = node.querySelector('.model-alias'); const imageInput = node.querySelector('.model-image'); const summaryName = node.querySelector('.model-summary-name'); const summarySub = node.querySelector('.model-summary-sub'); const badges = node.querySelector('.row-badges'); const name = nameInput ? nameInput.value.trim() : ''; const alias = aliasInput ? aliasInput.value.trim() : ''; const thinkLevels = Array.from(node.querySelectorAll('.model-think-level')).filter(cb=>cb.checked).map(cb=>cb.dataset.level).filter(level=>level !== 'none'); const none = node.querySelector('.model-think-level[data-level="none"]'); if(summaryName) summaryName.textContent = name || 'New model'; if(summarySub) summarySub.textContent = alias ? 'Alias: ' + alias : 'No alias set'; const chips = []; if(imageInput && imageInput.checked){ chips.push('<span class="row-badge image">Image</span>'); } if(none && none.checked){ chips.push('<span class="row-badge thinking">Thinking off</span>'); } else if(thinkLevels.length){ chips.push('<span class="row-badge thinking">Thinking</span>'); chips.push('<span class="row-badge">' + thinkLevels.length + ' levels</span>'); } if(badges) badges.innerHTML = chips.join(''); }
 function syncThinkControls(node, changed){ if(changed.dataset.level === 'none' && changed.checked){ node.querySelectorAll('.model-think-level').forEach(other=>{ if(other !== changed && other.dataset.level !== 'none'){ other.checked = false; } }); } else if(changed.dataset.level !== 'none' && changed.checked){ const none = node.querySelector('.model-think-level[data-level="none"]'); if(none) none.checked = false; } }
-function bindKeyRow(node){ const input = node.querySelector('.api-key-value'); const remove = node.querySelector('.row-remove'); if(input){ input.addEventListener('input', ()=>updateKeySummary(node)); input.addEventListener('change', ()=>updateKeySummary(node)); updateKeySummary(node); } if(remove){ remove.onclick = ev=>{ ev.preventDefault(); ev.stopPropagation(); node.remove(); updateCounts(); }; } }
+function bindKeyRow(node){ const input = node.querySelector('.api-key-value'); const remove = node.querySelector('.row-remove'); const test = node.querySelector('.row-test'); if(input){ input.addEventListener('input', ()=>updateKeySummary(node)); input.addEventListener('change', ()=>updateKeySummary(node)); updateKeySummary(node); } if(remove){ remove.onclick = ev=>{ ev.preventDefault(); ev.stopPropagation(); node.remove(); updateCounts(); }; } if(test){ test.onclick = ev=>{ ev.preventDefault(); ev.stopPropagation(); runProviderTest(Number(node.dataset.keyIndex || 0)); }; } }
 function bindHeaderRow(node){ const remove = node.querySelector('.row-remove'); if(remove){ remove.onclick = ev=>{ ev.preventDefault(); ev.stopPropagation(); node.remove(); updateCounts(); }; } }
 function bindModelRow(node){ const refresh = ()=>updateModelSummary(node); const remove = node.querySelector('.row-remove'); const nameInput = node.querySelector('.model-name'); const aliasInput = node.querySelector('.model-alias'); const imageInput = node.querySelector('.model-image'); if(nameInput){ nameInput.addEventListener('input', refresh); } if(aliasInput){ aliasInput.addEventListener('input', refresh); } if(imageInput){ imageInput.addEventListener('change', refresh); } node.querySelectorAll('.model-think-level').forEach(cb=>{ cb.addEventListener('change', ()=>{ syncThinkControls(node, cb); refresh(); updateCounts(); }); }); if(remove){ remove.onclick = ev=>{ ev.preventDefault(); ev.stopPropagation(); node.remove(); updateCounts(); }; } refresh(); }
+function renderTestModelOptions(rows){
+	const select = el('test-model');
+	if(!select) return;
+	const current = select.value;
+	select.innerHTML = '<option value="">Select a model to test</option>';
+	(rows || []).forEach(row=>{
+		const name = row && row.name ? row.name : '';
+		if(!name) return;
+		const option = document.createElement('option');
+		option.value = name;
+		option.textContent = row.alias ? name + ' - ' + row.alias : name;
+		select.appendChild(option);
+	});
+	if(current && Array.from(select.options).some(option=>option.value === current)) select.value = current;
+	else if(select.options.length === 2) select.selectedIndex = 1;
+}
 function render(data){
 	state = data;
 	const p = data.provider || {};
@@ -748,7 +786,7 @@ function render(data){
 	el('hmac_secret').placeholder = pl.hmac_secret_configured ? 'Write-only. Secret configured; leave empty to keep it.' : 'Write-only. Paste shared HMAC secret.';
 	el('agy_secret').value = '';
 	el('agy_secret').placeholder = pl.agy2api_identity_secret_configured ? 'Write-only. Secret configured; leave empty to keep it.' : 'Write-only. Paste shared agy2api secret.';
-	el('hmac_source').value = pl.hmac_secret_source || 'env';
+	el('hmac_source').value = pl.hmac_secret_source === 'agy2api_identity_secret' ? 'config' : (pl.hmac_secret_source || 'env');
 	el('metric-mode').textContent = p.replacement_mode || 'unknown';
 	el('metric-published').textContent = (p.published_model_ids || []).length;
 	el('metric-original').textContent = p.original_provider_live ? 'enabled' : 'disabled';
@@ -759,6 +797,7 @@ function render(data){
 	renderKeyRows(p.api_key_count || 0);
 	renderHeaderRows(p.headers || []);
 	renderModelRows(p.models || []);
+	renderTestModelOptions(p.models || []);
 	renderChips('live-models', p.published_model_ids || [], 'No plugin-published models right now.');
 	renderLog(data.diagnostics && data.diagnostics.recent_events || []);
 	for(const id of ids){ setLocked(el(id), !!data.locked); }
@@ -779,13 +818,13 @@ function rowHtml(type, row, index){
 					'<div class="rowcard-title"><strong>Key #' + (index + 1) + '</strong><span class="row-badge row-secret-preview">' + esc(summary) + '</span></div>' +
 					'<div class="rowcard-sub">Write-only. ' + esc(placeholder) + '</div>' +
 				'</div>' +
-				'<div class="rowcard-tools"><button class="btn row-remove" type="button">×</button></div>' +
+				'<div class="rowcard-tools"><span class="row-badge row-test-status"></span><button class="btn row-test" type="button">Test</button><button class="icon-btn row-remove" type="button" aria-label="Remove API key" title="Remove">×</button></div>' +
 			'</summary>' +
 			'<div class="row-body"><div class="field"><label>API key</label><input class="api-key-value" type="password" autocomplete="new-password" placeholder="' + esc(placeholder) + '"></div><div class="muted small">Configured keys stay hidden.</div></div>' +
 		'</details>';
 	}
 	if(type === 'header'){
-		return '<div class="rowcard header-row" data-row="header"><div class="rowgrid cols-3"><div class="field"><label>Header</label><input class="header-key" placeholder="X-Custom-Header"></div><div class="field"><label>Value</label><input class="header-value" placeholder="value"></div><div class="actions"><button class="btn row-remove" type="button">×</button></div></div></div>';
+		return '<div class="rowcard header-row" data-row="header"><div class="rowgrid cols-3"><div class="field"><label>Header</label><input class="header-key" placeholder="X-Custom-Header"></div><div class="field"><label>Value</label><input class="header-value" placeholder="value"></div><div class="actions end"><button class="icon-btn row-remove" type="button" aria-label="Remove request header" title="Remove">×</button></div></div></div>';
 	}
 	const levels = ['none','minimal','low','medium','high','xhigh','max','auto'];
 	const labels = {none:'Disable thinking', minimal:'Minimal', low:'Low', medium:'Medium', high:'High', xhigh:'Extra high', max:'Maximum', auto:'Automatic'};
@@ -810,7 +849,7 @@ function rowHtml(type, row, index){
 				'<div class="rowcard-title"><strong class="model-summary-name">' + esc(name || 'New model') + '</strong></div>' +
 				'<div class="rowcard-sub model-summary-sub">' + esc(alias ? 'Alias: ' + alias : 'No alias set') + '</div>' +
 			'</div>' +
-			'<div class="rowcard-tools"><div class="row-badges">' + chips.join('') + '</div><button class="btn row-remove" type="button">×</button></div>' +
+			'<div class="rowcard-tools"><div class="row-badges">' + chips.join('') + '</div><button class="icon-btn row-remove" type="button" aria-label="Remove model" title="Remove">×</button></div>' +
 		'</summary>' +
 		'<div class="row-body">' +
 			'<div class="grid"><div class="field"><label>Model</label><input class="model-name" placeholder="gemini-3.7-flash-high" value="' + esc(name) + '"></div><div class="field"><label>Alias</label><input class="model-alias" placeholder="alias (optional)" value="' + esc(alias) + '"></div></div>' +
@@ -851,23 +890,84 @@ function renderRows(containerId, type, rows){
 function renderKeyRows(count){ renderRows('api-key-rows', 'key', count > 0 ? Array.from({length: count}, ()=>({existing: true})) : [{existing: false, open: true}]); }
 function renderHeaderRows(rows){ renderRows('header-rows', 'header', rows || []); }
 function renderModelRows(rows){ renderRows('model-rows', 'model', rows || []); }
-function updateCounts(){ el('api-key-count').textContent = el('api-key-rows').querySelectorAll('.rowcard').length.toString(); el('header-count').textContent = el('header-rows').querySelectorAll('.rowcard').length.toString(); el('model-count').textContent = el('model-rows').querySelectorAll('.rowcard').length.toString(); }
+function updateCounts(){ const keys = el('api-key-rows').querySelectorAll('.rowcard'); keys.forEach((node,index)=>{ node.dataset.keyIndex = index.toString(); const title = node.querySelector('.rowcard-title strong'); if(title) title.textContent = 'Key #' + (index + 1); }); el('api-key-count').textContent = keys.length.toString(); el('header-count').textContent = el('header-rows').querySelectorAll('.rowcard').length.toString(); el('model-count').textContent = el('model-rows').querySelectorAll('.rowcard').length.toString(); renderTestModelOptions(collectModels()); }
 function collectKeyRows(){ return Array.from(el('api-key-rows').querySelectorAll('.rowcard')).map(node=>({existing: node.dataset.existing === 'true', value: node.querySelector('.api-key-value').value.trim()})); }
 function collectHeaders(){ return Array.from(el('header-rows').querySelectorAll('.rowcard')).map(node=>({key: node.querySelector('.header-key').value.trim(), value: node.querySelector('.header-value').value.trim()})).filter(item=>item.key && item.value); }
 function collectModels(){ return Array.from(el('model-rows').querySelectorAll('.rowcard')).map(node=>{ const levels = Array.from(node.querySelectorAll('.model-think-level')).filter(cb=>cb.checked).map(cb=>cb.dataset.level).filter(level=>level !== 'none'); const none = node.querySelector('.model-think-level[data-level="none"]'); return {name: node.querySelector('.model-name').value.trim(), alias: node.querySelector('.model-alias').value.trim(), image: node.querySelector('.model-image').checked, thinking_disabled: !!(none && none.checked), thinking_levels: levels}; }).filter(item=>item.name || item.alias); }
-function payload(){ const keyRows = collectKeyRows(); return {original_name: el('original_name').value, original_prefix: el('original_prefix').value, original_base_url: el('original_base_url').value, name: el('name').value.trim(), prefix: el('prefix').value.trim(), base_url: el('base_url').value.trim(), priority: Number(el('priority').value || 0), disabled: el('disabled').checked, disable_cooling: el('disable_cooling').checked, api_keys: keyRows.filter(row=>!row.existing).map(row=>row.value).filter(Boolean), api_key_rows: keyRows, headers: collectHeaders(), models: collectModels(), enabled: el('enabled').checked, allow_explicit_client_identity_headers: el('allow_explicit_client_identity_headers').checked, principal_fallback_mode: el('principal_fallback_mode').value, debug_logging: el('debug_logging').value === 'true', executor_enabled: el('executor_enabled').value === 'true', executor_provider: el('executor_provider').value.trim(), model_namespace: el('model_namespace').value.trim(), hmac_secret: el('hmac_secret').value, agy2api_identity_secret: el('agy_secret').value, hmac_secret_source: el('hmac_source').value}; }
+function payload(){ const keyRows = collectKeyRows(); return {original_name: el('original_name').value, original_prefix: el('original_prefix').value, original_base_url: el('original_base_url').value, name: el('name').value.trim(), prefix: el('prefix').value.trim(), base_url: el('base_url').value.trim(), priority: Number(el('priority').value || 0), disabled: el('disabled').checked, disable_cooling: el('disable_cooling').checked, api_keys: keyRows.filter(row=>!row.existing).map(row=>row.value).filter(Boolean), api_key_rows: keyRows, headers: collectHeaders(), models: collectModels(), enabled: el('enabled').checked, allow_explicit_client_identity_headers: el('allow_explicit_client_identity_headers').checked, principal_fallback_mode: el('principal_fallback_mode').value, debug_logging: el('debug_logging').value === 'true', executor_enabled: el('executor_enabled').value === 'true', executor_provider: el('executor_provider').value.trim(), model_namespace: el('model_namespace').value.trim(), hmac_secret: el('hmac_secret').value, agy2api_identity_secret: el('agy_secret').value, hmac_secret_source: el('hmac_source').value, test_model: el('test-model').value, test_api_key_index: -1}; }
+function appendModelRow(row){ const box = el('model-rows'); const empty = box.querySelector('.muted.small'); if(empty) box.innerHTML = ''; const wrap = document.createElement('div'); wrap.innerHTML = rowHtml('model', row || {}, box.querySelectorAll('.rowcard').length); const node = wrap.firstElementChild; if(!node) return; box.appendChild(node); bindModelRow(node); updateCounts(); }
+function openModelPicker(models){ fetchedModels = (models || []).filter(Boolean).map(String); renderPicker(); el('model-picker').classList.remove('hidden'); }
+function closeModelPicker(){ el('model-picker').classList.add('hidden'); fetchedModels = []; }
+function renderPicker(){
+	const list = el('picker-list');
+	const query = (el('picker-search').value || '').trim().toLowerCase();
+	const existing = new Set(collectModels().map(row=>(row.name || row.alias || '').toLowerCase()));
+	const visible = fetchedModels.filter(model=>model.toLowerCase().includes(query));
+	list.innerHTML = '';
+	visible.forEach(model=>{
+		const already = existing.has(model.toLowerCase());
+		const row = document.createElement('div');
+		row.className = 'picker-row';
+		row.dataset.model = model;
+		row.innerHTML = '<label><input type="checkbox" class="picker-model"' + (already ? ' disabled' : ' checked') + '><code>' + esc(model) + '</code></label>' + (already ? '<span class="row-badge">Already added</span>' : '');
+		list.appendChild(row);
+	});
+	const available = visible.filter(model=>!existing.has(model.toLowerCase())).length;
+	el('picker-count').textContent = available + ' new of ' + fetchedModels.length + ' models';
+	const selectAll = el('picker-select-all');
+	const newRows = Array.from(list.querySelectorAll('.picker-row')).filter(row=>!row.querySelector('.picker-model').disabled);
+	selectAll.checked = available > 0 && newRows.length > 0 && newRows.every(row=>row.querySelector('.picker-model').checked);
+	selectAll.disabled = available === 0;
+}
+function applyPickedModels(){
+	const existing = new Set(collectModels().map(row=>(row.name || row.alias || '').toLowerCase()));
+	let added = 0;
+	el('picker-list').querySelectorAll('.picker-row').forEach(row=>{
+		const checkbox = row.querySelector('.picker-model');
+		const model = row.dataset.model || '';
+		if(checkbox && checkbox.checked && !checkbox.disabled && !existing.has(model.toLowerCase())){
+			appendModelRow({name: model, image: model.toLowerCase().includes('image'), thinking_levels: model.toLowerCase().includes('image') ? [] : ['low','medium','high']});
+			existing.add(model.toLowerCase());
+			added++;
+		}
+	});
+	closeModelPicker();
+	notice(added ? added + ' model(s) added. Review and Save to persist them.' : 'No new models selected.', added ? 'ok' : 'warn');
+}
+async function runProviderTest(index){
+	if(state.locked){ notice('Load secure config first.', 'warn'); return; }
+	const body = payload();
+	body.test_api_key_index = index === undefined ? -1 : index;
+	try{
+		const data = await call('/provider/test', body);
+		(data.results || []).forEach(result=>{
+			const node = el('api-key-rows').querySelectorAll('.rowcard')[result.index];
+			if(!node) return;
+			const badge = node.querySelector('.row-test-status');
+			if(badge){ badge.textContent = result.ok ? 'Passed ' + result.http_status : 'Failed ' + (result.http_status || ''); badge.className = 'row-badge row-test-status ' + (result.ok ? 'test-ok' : 'test-err'); }
+		});
+		notice(data.ok ? 'Test passed for ' + data.tested + ' key(s).' : 'One or more API keys failed the test.', data.ok ? 'ok' : 'err');
+		show(data);
+	}catch(e){ notice('Test failed: ' + e.message, 'err'); show('Test failed: ' + e.message); }
+}
 async function call(path, body){ const res = await fetch(MGT + path, {method: body ? 'POST' : 'GET', headers: mgmtHeaders(!!body), body: body ? JSON.stringify(body) : undefined}); const text = await res.text(); let data; try{ data = JSON.parse(text); }catch{ data = text; } if(!res.ok) throw new Error(typeof data === 'string' ? data : JSON.stringify(data)); return data; }
 el('drawer-toggle').onclick = ()=>setDrawer(!drawerOpen);
 el('drawer-rail-toggle').onclick = ()=>setDrawer(!drawerOpen);
+el('drawer-close').onclick = ()=>setDrawer(false);
 document.querySelectorAll('.drawer-tab').forEach(tab=>{ tab.onclick = ()=>setPane(tab.dataset.pane); });
-el('load-secure').onclick = async ()=>{ try{ if(el('mkey').value.trim()) sessionStorage.setItem('agyBridgeManagementKey', el('mkey').value.trim()); const data = await call('/provider/config'); render(data); setDrawer(true); show('Secure config loaded.'); }catch(e){ show('Could not load secure config: ' + e.message); } };
-el('clear-key').onclick = ()=>{ sessionStorage.removeItem('agyBridgeManagementKey'); el('mkey').value = ''; show('Management key cleared from this browser session.'); };
-el('add-key').onclick = ()=>{ if(state.locked){ show('Load secure config first.'); return; } const box = el('api-key-rows'); const wrap = document.createElement('div'); wrap.innerHTML = rowHtml('key', {existing:false, open:true}, box.children.length); const node = wrap.firstElementChild; if(node) box.appendChild(node); updateCounts(); if(node){ bindKeyRow(node); node.open = true; const input = node.querySelector('.api-key-value'); if(input) input.focus(); } };
-el('add-header').onclick = ()=>{ if(state.locked){ show('Load secure config first.'); return; } const box = el('header-rows'); const wrap = document.createElement('div'); wrap.innerHTML = rowHtml('header', {}, box.children.length); const node = wrap.firstElementChild; if(node){ box.appendChild(node); bindHeaderRow(node); } updateCounts(); if(node){ const input = node.querySelector('.header-key'); if(input) input.focus(); } };
-el('add-model').onclick = ()=>{ if(state.locked){ show('Load secure config first.'); return; } const box = el('model-rows'); const wrap = document.createElement('div'); wrap.innerHTML = rowHtml('model', {name:'', alias:'', thinking_levels:['low','medium','high'], open:true}, box.children.length); const node = wrap.firstElementChild; if(node){ box.appendChild(node); bindModelRow(node); node.open = true; const input = node.querySelector('.model-name'); if(input) input.focus(); } updateCounts(); };
-el('fetch-models').onclick = async ()=>{ if(state.locked){ show('Load secure config first.'); return; } try{ const data = await call('/provider/fetch-models', payload()); if(data.models){ renderModelRows((data.models || []).map(id=>({name:id, thinking_levels:['low','medium','high']}))); } show(data); }catch(e){ show('Fetch failed: ' + e.message); } };
-el('test-provider').onclick = async ()=>{ if(state.locked){ show('Load secure config first.'); return; } try{ show(await call('/provider/test', payload())); }catch(e){ show('Test failed: ' + e.message); } };
-el('editor-form').onsubmit = async (ev)=>{ ev.preventDefault(); if(state.locked){ show('Load secure config first.'); return; } try{ const data = await call('/provider/save', payload()); show(data); if(data.editor) render(data.editor); }catch(e){ show('Save failed: ' + e.message); } };
+el('load-secure').onclick = async ()=>{ try{ if(el('mkey').value.trim()) sessionStorage.setItem('agyBridgeManagementKey', el('mkey').value.trim()); const data = await call('/provider/config'); render(data); setDrawer(true); notice('Secure provider configuration loaded.', 'ok'); show('Secure config loaded.'); }catch(e){ notice('Could not load secure config.', 'err'); show('Could not load secure config: ' + e.message); } };
+el('clear-key').onclick = ()=>{ sessionStorage.removeItem('agyBridgeManagementKey'); el('mkey').value = ''; notice('Management key cleared from this browser session.', 'warn'); show('Management key cleared from this browser session.'); };
+el('add-key').onclick = ()=>{ if(state.locked){ notice('Load secure config first.', 'warn'); return; } const box = el('api-key-rows'); const empty = box.querySelector('.muted.small'); if(empty) box.innerHTML = ''; const wrap = document.createElement('div'); wrap.innerHTML = rowHtml('key', {existing:false, open:true}, box.querySelectorAll('.rowcard').length); const node = wrap.firstElementChild; if(node) box.appendChild(node); updateCounts(); if(node){ bindKeyRow(node); node.open = true; const input = node.querySelector('.api-key-value'); if(input) input.focus(); } };
+el('add-header').onclick = ()=>{ if(state.locked){ notice('Load secure config first.', 'warn'); return; } const box = el('header-rows'); const empty = box.querySelector('.muted.small'); if(empty) box.innerHTML = ''; const wrap = document.createElement('div'); wrap.innerHTML = rowHtml('header', {}, box.children.length); const node = wrap.firstElementChild; if(node){ box.appendChild(node); bindHeaderRow(node); } updateCounts(); if(node){ const input = node.querySelector('.header-key'); if(input) input.focus(); } };
+el('add-model').onclick = ()=>{ if(state.locked){ notice('Load secure config first.', 'warn'); return; } appendModelRow({name:'', alias:'', thinking_levels:['low','medium','high'], open:true}); const node = el('model-rows').lastElementChild; if(node){ node.open = true; const input = node.querySelector('.model-name'); if(input) input.focus(); } };
+el('fetch-models').onclick = async ()=>{ if(state.locked){ notice('Load secure config first.', 'warn'); return; } try{ const data = await call('/provider/fetch-models', payload()); if(data.models){ openModelPicker(data.models); notice(data.model_count + ' models fetched. Select which ones to add.', 'ok'); } show(data); }catch(e){ notice('Fetch failed. Check the endpoint and API key.', 'err'); show('Fetch failed: ' + e.message); } };
+el('test-provider').onclick = ()=>runProviderTest();
+el('picker-close').onclick = closeModelPicker;
+el('picker-cancel').onclick = closeModelPicker;
+el('picker-apply').onclick = applyPickedModels;
+el('picker-search').oninput = renderPicker;
+el('picker-select-all').onchange = ev=>{ el('picker-list').querySelectorAll('.picker-model:not(:disabled)').forEach(node=>{ node.checked = ev.target.checked; }); };
+el('editor-form').onsubmit = async (ev)=>{ ev.preventDefault(); if(state.locked){ notice('Load secure config first.', 'warn'); return; } try{ const data = await call('/provider/save', payload()); notice('Provider configuration saved.', 'ok'); show(data); if(data.editor) render(data.editor); }catch(e){ notice('Save failed. CPA config was not updated.', 'err'); show('Save failed: ' + e.message); } };
 function refreshLockedState(){ for(const id of ids){ setLocked(el(id), !!state.locked); } ['fetch-models','test-provider','save-provider','add-key','add-header','add-model','load-secure','clear-key'].forEach(id=>{ const node = el(id); if(node) node.disabled = !!state.locked && id !== 'load-secure' && id !== 'clear-key'; }); }
 render(state);
 refreshLockedState();
@@ -927,49 +1027,62 @@ func handleProviderEditorSave(request pluginapi.ManagementRequest) ([]byte, erro
 }
 
 func handleProviderTest(request pluginapi.ManagementRequest) ([]byte, error) {
-	payload, _ := parseProviderEditorPayload(request.Body)
-	spec := providerSpecFromEditorPayload(payload)
-	if spec.BaseURL == "" || spec.primaryAPIKey() == "" {
-		if current, found := resolveProviderSpec(); found {
-			if spec.BaseURL == "" {
-				spec.BaseURL = current.BaseURL
-			}
-			if spec.primaryAPIKey() == "" {
-				spec.APIKeys = current.APIKeys
-			}
-			if len(spec.Headers) == 0 {
-				spec.Headers = current.Headers
-			}
+	payload, errParse := parseProviderEditorPayload(request.Body)
+	if errParse != nil {
+		return managementJSONResponse(http.StatusBadRequest, map[string]any{"ok": false, "error": errParse.Error()}), nil
+	}
+	spec := editorProviderSpec(payload)
+	model := editorTestModel(payload, spec)
+	if model == "" {
+		return managementJSONResponse(http.StatusBadRequest, map[string]any{
+			"ok":    false,
+			"error": "select or add a model before testing",
+		}), nil
+	}
+	keys := editorProviderAPIKeys(payload, spec)
+	if len(keys) == 0 {
+		return managementJSONResponse(http.StatusBadRequest, map[string]any{
+			"ok":    false,
+			"error": "API key is required or must already exist in provider config",
+		}), nil
+	}
+	indices := make([]int, 0, len(keys))
+	if payload.TestAPIKeyIndex >= 0 {
+		if payload.TestAPIKeyIndex >= len(keys) {
+			return managementJSONResponse(http.StatusBadRequest, map[string]any{"ok": false, "error": "selected API key is out of range"}), nil
+		}
+		indices = append(indices, payload.TestAPIKeyIndex)
+	} else {
+		for index := range keys {
+			indices = append(indices, index)
 		}
 	}
-	status, models, errProbe := probeProviderModels(spec)
-	if errProbe != nil {
-		return managementJSONResponse(http.StatusBadGateway, map[string]any{"ok": false, "error": errProbe.Error()}), nil
+	results := make([]providerTestResult, 0, len(indices))
+	for _, index := range indices {
+		results = append(results, testProviderModel(spec, keys[index], model, index))
+	}
+	ok := len(results) > 0
+	for _, result := range results {
+		if !result.OK {
+			ok = false
+			break
+		}
 	}
 	return managementJSONResponse(http.StatusOK, map[string]any{
-		"ok":          status >= 200 && status < 300,
-		"http_status": status,
-		"model_count": len(models),
-		"models":      models,
+		"ok":       ok,
+		"model":    stripModelPrefix(model, settingsModelPrefix(currentPluginSettings(), spec)),
+		"results":  results,
+		"tested":   len(results),
+		"test_all": payload.TestAPIKeyIndex < 0,
 	}), nil
 }
 
 func handleProviderFetchModels(request pluginapi.ManagementRequest) ([]byte, error) {
-	payload, _ := parseProviderEditorPayload(request.Body)
-	spec := providerSpecFromEditorPayload(payload)
-	if spec.BaseURL == "" || spec.primaryAPIKey() == "" {
-		if current, found := resolveProviderSpec(); found {
-			if spec.BaseURL == "" {
-				spec.BaseURL = current.BaseURL
-			}
-			if spec.primaryAPIKey() == "" {
-				spec.APIKeys = current.APIKeys
-			}
-			if len(spec.Headers) == 0 {
-				spec.Headers = current.Headers
-			}
-		}
+	payload, errParse := parseProviderEditorPayload(request.Body)
+	if errParse != nil {
+		return managementJSONResponse(http.StatusBadRequest, map[string]any{"ok": false, "error": errParse.Error()}), nil
 	}
+	spec := editorProviderSpec(payload)
 	status, models, errProbe := probeProviderModels(spec)
 	if errProbe != nil {
 		return managementJSONResponse(http.StatusBadGateway, map[string]any{"ok": false, "error": errProbe.Error()}), nil
@@ -983,7 +1096,7 @@ func handleProviderFetchModels(request pluginapi.ManagementRequest) ([]byte, err
 }
 
 func parseProviderEditorPayload(raw []byte) (providerEditorPayload, error) {
-	var payload providerEditorPayload
+	payload := providerEditorPayload{TestAPIKeyIndex: -1}
 	if len(raw) == 0 {
 		return payload, nil
 	}
@@ -1001,6 +1114,10 @@ func parseProviderEditorPayload(raw []byte) (providerEditorPayload, error) {
 	payload.HMACSecret = strings.TrimSpace(payload.HMACSecret)
 	payload.Agy2apiIdentitySecret = strings.TrimSpace(payload.Agy2apiIdentitySecret)
 	payload.HMACSecretSource = strings.ToLower(strings.TrimSpace(payload.HMACSecretSource))
+	payload.TestModel = strings.TrimSpace(payload.TestModel)
+	if payload.TestAPIKeyIndex < -1 {
+		payload.TestAPIKeyIndex = -1
+	}
 	payload.APIKeys = uniqueStrings(payload.APIKeys)
 	for i := range payload.APIKeyRows {
 		payload.APIKeyRows[i].Value = strings.TrimSpace(payload.APIKeyRows[i].Value)
@@ -1045,6 +1162,190 @@ func providerSpecFromEditorPayload(payload providerEditorPayload) providerSpec {
 	}
 }
 
+func editorProviderSpec(payload providerEditorPayload) providerSpec {
+	spec := providerSpecFromEditorPayload(payload)
+	current, found := resolveProviderSpec()
+	if found {
+		if spec.Name == "" {
+			spec.Name = current.Name
+		}
+		if spec.Prefix == "" {
+			spec.Prefix = current.Prefix
+		}
+		if spec.BaseURL == "" {
+			spec.BaseURL = current.BaseURL
+		}
+		if len(spec.Headers) == 0 {
+			spec.Headers = current.Headers
+		}
+		spec.APIKeys = editorProviderAPIKeys(payload, current)
+		spec.Models = current.Models
+	}
+	if len(spec.APIKeys) == 0 {
+		spec.APIKeys = uniqueStrings(payload.APIKeys)
+	}
+	if len(payload.Models) > 0 {
+		spec.Models = editorModelsForTest(payload.Models)
+	}
+	if spec.Prefix == "" {
+		spec.Prefix = payload.OriginalPrefix
+	}
+	return spec
+}
+
+func editorProviderAPIKeys(payload providerEditorPayload, current providerSpec) []string {
+	if len(payload.APIKeyRows) == 0 {
+		if len(payload.APIKeys) > 0 {
+			return uniqueStrings(payload.APIKeys)
+		}
+		return append([]string(nil), current.APIKeys...)
+	}
+	out := make([]string, 0, len(payload.APIKeyRows))
+	for index, row := range payload.APIKeyRows {
+		value := strings.TrimSpace(row.Value)
+		if value == "" && row.Existing && index < len(current.APIKeys) {
+			value = current.APIKeys[index]
+		}
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return uniqueStrings(out)
+}
+
+func editorModelsForTest(rows []providerEditorModel) []modelSpec {
+	out := make([]modelSpec, 0, len(rows))
+	for _, row := range rows {
+		name := strings.TrimSpace(row.Name)
+		if name == "" {
+			name = strings.TrimSpace(row.Alias)
+		}
+		if name == "" {
+			continue
+		}
+		var thinking *thinkingSpec
+		if row.ThinkingDisabled || len(row.ThinkingLevels) > 0 {
+			thinking = &thinkingSpec{Levels: append([]string(nil), row.ThinkingLevels...)}
+		}
+		out = append(out, modelSpec{
+			Name:             name,
+			Alias:            strings.TrimSpace(row.Alias),
+			Image:            row.Image,
+			Thinking:         thinking,
+			InputModalities:  append([]string(nil), row.InputModalities...),
+			OutputModalities: append([]string(nil), row.OutputModalities...),
+		})
+	}
+	return out
+}
+
+func editorTestModel(payload providerEditorPayload, spec providerSpec) string {
+	if model := strings.TrimSpace(payload.TestModel); model != "" {
+		return model
+	}
+	if len(payload.Models) > 0 {
+		for _, row := range payload.Models {
+			if name := strings.TrimSpace(row.Name); name != "" {
+				return name
+			}
+		}
+	}
+	for _, model := range spec.Models {
+		if model.Name != "" {
+			return model.Name
+		}
+		if model.Alias != "" {
+			return model.Alias
+		}
+	}
+	return ""
+}
+
+func testProviderModel(spec providerSpec, apiKey, model string, index int) providerTestResult {
+	result := providerTestResult{
+		Index: index,
+		Label: fmt.Sprintf("Key #%d", index+1),
+		Model: stripModelPrefix(model, settingsModelPrefix(currentPluginSettings(), spec)),
+	}
+	if spec.upstreamBaseURL() == "" {
+		result.Error = "base URL is required"
+		return result
+	}
+	testSpec := spec
+	testSpec.APIKeys = []string{apiKey}
+	result.Model = stripModelPrefix(result.Model, settingsModelPrefix(currentPluginSettings(), testSpec))
+	image := editorModelIsImage(testSpec.Models, model)
+	endpoint := "/chat/completions"
+	body := map[string]any{
+		"model":      result.Model,
+		"messages":   []map[string]string{{"role": "user", "content": "Reply with OK."}},
+		"max_tokens": 4,
+		"stream":     false,
+	}
+	if image {
+		endpoint = "/images/generations"
+		body = map[string]any{
+			"model":  result.Model,
+			"prompt": "Create a small test image of a blue square.",
+			"size":   "256x256",
+			"n":      1,
+		}
+	}
+	result.Endpoint = endpoint
+	rawBody, errMarshal := json.Marshal(body)
+	if errMarshal != nil {
+		result.Error = "test payload could not be encoded"
+		return result
+	}
+	req := executorRequest{
+		Model: result.Model,
+		Headers: map[string][]string{
+			"User-Agent": {"agy-identity-bridge-dashboard"},
+		},
+	}
+	identity := identityFromExecutorRequest(req)
+	headers := map[string][]string{
+		"Authorization": {"Bearer " + apiKey},
+		"Content-Type":  {"application/json"},
+		"Accept":        {"application/json"},
+		"User-Agent":    {"agy-identity-bridge-dashboard"},
+	}
+	for key, values := range identityHeaders(identity, testSpec, req, "POST", endpoint) {
+		headers[key] = values
+	}
+	responseRaw, errCall := hostCall(pluginabi.MethodHostHTTPDo, hostHTTPRequest{
+		Method:  "POST",
+		URL:     testSpec.upstreamBaseURL() + endpoint,
+		Headers: headers,
+		Body:    b64(rawBody),
+	}.marshal())
+	if errCall != nil {
+		result.Error = errCall.Error()
+		return result
+	}
+	var response hostHTTPResponse
+	if errDecode := json.Unmarshal(responseRaw, &response); errDecode != nil {
+		result.Error = "decode upstream test response failed"
+		return result
+	}
+	result.HTTPStatus = response.StatusCode
+	result.OK = response.StatusCode >= 200 && response.StatusCode < 300
+	if !result.OK {
+		result.Error = fmt.Sprintf("agy2api returned HTTP %d", response.StatusCode)
+	}
+	return result
+}
+
+func editorModelIsImage(models []modelSpec, model string) bool {
+	model = strings.TrimSpace(model)
+	for _, item := range models {
+		if strings.EqualFold(item.Name, model) || strings.EqualFold(item.Alias, model) {
+			return item.Image
+		}
+	}
+	return strings.Contains(strings.ToLower(model), "image")
+}
+
 func probeProviderModels(spec providerSpec) (int, []string, error) {
 	if spec.upstreamBaseURL() == "" {
 		return 0, nil, fmt.Errorf("base URL is required")
@@ -1056,6 +1357,15 @@ func probeProviderModels(spec providerSpec) (int, []string, error) {
 		"Authorization": {"Bearer " + spec.primaryAPIKey()},
 		"Accept":        {"application/json"},
 		"User-Agent":    {"agy-identity-bridge-dashboard"},
+	}
+	identityRequest := executorRequest{
+		Headers: map[string][]string{
+			"User-Agent": {"agy-identity-bridge-dashboard"},
+		},
+	}
+	identity := identityFromExecutorRequest(identityRequest)
+	for key, values := range identityHeaders(identity, spec, identityRequest, http.MethodGet, "/models") {
+		headers[key] = values
 	}
 	for key, value := range spec.Headers {
 		if strings.TrimSpace(key) != "" && strings.TrimSpace(value) != "" {
