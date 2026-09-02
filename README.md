@@ -17,7 +17,7 @@ For a matched request the plugin:
 
 The plugin does not modify unrelated providers.
 
-Release 0.2.14 keeps the identity bridge canonical payload stable for agy2api
+Release 0.2.15 keeps the identity bridge canonical payload stable for agy2api
 while preserving the legacy signing fallback during the transition period and
 adds passive usage telemetry for the mirrored provider.
 
@@ -342,19 +342,19 @@ Go 1.26 and GCC:
 
 ```sh
 make test
-make build VERSION=0.2.14
+make build VERSION=0.2.15
 ```
 
 The output is:
 
 ```text
-dist/agy-identity-bridge-v0.2.14.so
+dist/agy-identity-bridge-v0.2.15.so
 ```
 
 The GitHub Actions workflow builds and packages:
 
 ```text
-agy-identity-bridge_0.2.14_linux_amd64.zip
+agy-identity-bridge_0.2.15_linux_amd64.zip
 checksums.txt
 ```
 
