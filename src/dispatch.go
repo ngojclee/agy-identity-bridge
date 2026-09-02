@@ -8,10 +8,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
 )
+
+// CPA re-applies plugin runtime config on every client/config sync (auth
+// cooldown changes, refreshes, management saves), so reconfigure arrives many
+// times per minute. Only log the discovery summary when the effective config
+// actually changed to keep host and dashboard logs readable.
+var lastAppliedConfigFingerprint atomic.Value
 
 type lifecycleRequest struct {
 	ConfigYAML []byte `json:"config_yaml"`
@@ -168,16 +175,8 @@ func configurePlugin(raw []byte) error {
 	storeProviderSpec(providerSpec{}, false)
 	spec, mirrored := resolveProviderSpec()
 	settings := currentPluginSettings()
-	hostLog("info", "provider mirror resolved", map[string]any{
-		"executor_provider": settings.ExecutorProvider,
-		"mirrored":          spec.Name,
-		"found":             mirrored,
-		"models":            len(spec.Models),
-		"has_api_key":       spec.primaryAPIKey() != "",
-		"executor_enabled":  settings.ExecutorEnabled,
-		"model_namespace":   settings.ModelNamespace,
-	})
 
+	authEnsured := false
 	if settings.ExecutorEnabled && mirrored {
 		if errAuth := ensureAuthRecord(spec, settings); errAuth != nil {
 			// Non-fatal: the plugin still registers and models still list.
@@ -188,28 +187,44 @@ func configurePlugin(raw []byte) error {
 			})
 			recordDashboardEvent("error", "Plugin executor auth record could not be created")
 		} else {
-			hostLog("info", "auth record ensured", map[string]any{
-				"provider": settings.ExecutorProvider,
-			})
+			authEnsured = true
 		}
 	}
 
 	diagnostics := scanProviderDiagnostics()
-	recordDashboardEvent("info", fmt.Sprintf(
-		"Configuration applied: %d matched provider record(s), replacement mode %s",
-		diagnostics.MatchedRecordCount, diagnostics.ReplacementMode,
-	))
-	hostLog("info", "provider discovery completed", map[string]any{
-		"config_path_found":        diagnostics.ConfigPathFound,
-		"plugin_config_found":      diagnostics.PluginConfigFound,
-		"scanned_records":          diagnostics.ScannedRecordCount,
-		"matched_records":          diagnostics.MatchedRecordCount,
-		"matched_providers":        diagnostics.MatchedProviderCount,
-		"runtime_auth_count":       diagnostics.RuntimeAuthCount,
-		"auto_discover":            diagnostics.AutoDiscover,
-		"match_mode":               diagnostics.MatchMode,
-		"match_api_key_configured": diagnostics.MatchAPIKeyConfigured,
-	})
+	fingerprint := fmt.Sprintf("%+v|%+v|%+v", settings, spec, diagnostics)
+	if lastAppliedConfigFingerprint.Load() != fingerprint {
+		lastAppliedConfigFingerprint.Store(fingerprint)
+		hostLog("info", "provider mirror resolved", map[string]any{
+			"executor_provider": settings.ExecutorProvider,
+			"mirrored":          spec.Name,
+			"found":             mirrored,
+			"models":            len(spec.Models),
+			"has_api_key":       spec.primaryAPIKey() != "",
+			"executor_enabled":  settings.ExecutorEnabled,
+			"model_namespace":   settings.ModelNamespace,
+		})
+		if authEnsured {
+			hostLog("info", "auth record ensured", map[string]any{
+				"provider": settings.ExecutorProvider,
+			})
+		}
+		recordDashboardEvent("info", fmt.Sprintf(
+			"Configuration applied: %d matched provider record(s), replacement mode %s",
+			diagnostics.MatchedRecordCount, diagnostics.ReplacementMode,
+		))
+		hostLog("info", "provider discovery completed", map[string]any{
+			"config_path_found":        diagnostics.ConfigPathFound,
+			"plugin_config_found":      diagnostics.PluginConfigFound,
+			"scanned_records":          diagnostics.ScannedRecordCount,
+			"matched_records":          diagnostics.MatchedRecordCount,
+			"matched_providers":        diagnostics.MatchedProviderCount,
+			"runtime_auth_count":       diagnostics.RuntimeAuthCount,
+			"auto_discover":            diagnostics.AutoDiscover,
+			"match_mode":               diagnostics.MatchMode,
+			"match_api_key_configured": diagnostics.MatchAPIKeyConfigured,
+		})
+	}
 	return nil
 }
 
