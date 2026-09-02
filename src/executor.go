@@ -436,6 +436,7 @@ func handleExecutorExecute(raw []byte) ([]byte, error) {
 		return errorEnvelope("provider_unresolved", "no mirrored provider is configured"), nil
 	}
 	normalizeExecutorModel(&req, spec)
+	visibleModel = req.Model
 	identity := identityFromExecutorRequest(req)
 	upstream, errBuild := buildUpstreamRequest(req, spec, identity)
 	if errBuild != nil {
@@ -473,6 +474,7 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 		return errorEnvelope("provider_unresolved", "no mirrored provider is configured"), nil
 	}
 	normalizeExecutorModel(&req, spec)
+	visibleModel = req.Model
 	// CPA may select execute_stream for a request whose original payload did
 	// not carry stream=true. The host stream callback requires an actual
 	// upstream stream, so make the agy2api request streaming as well.
@@ -536,6 +538,7 @@ func handleExecutorCountTokens(raw []byte) ([]byte, error) {
 		return errorEnvelope("provider_unresolved", "no mirrored provider is configured"), nil
 	}
 	normalizeExecutorModel(&req, spec)
+	visibleModel = req.Model
 	identity := identityFromExecutorRequest(req)
 	upstream, errBuild := buildUpstreamRequest(req, spec, identity)
 	if errBuild != nil {
