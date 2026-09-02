@@ -148,7 +148,7 @@ func TestModelInfosMatchCPAMapping(t *testing.T) {
 	}
 }
 
-func TestModelRegistrationLeavesPrefixToCPA(t *testing.T) {
+func TestModelRegistrationReturnsBareIDsForCPA(t *testing.T) {
 	loadMirror(t)
 	root, _ := parseYAMLMap([]byte(mirrorConfigYAML))
 	spec, _ := extractProviderSpec(root, currentPluginSettings())
@@ -157,11 +157,8 @@ func TestModelRegistrationLeavesPrefixToCPA(t *testing.T) {
 		t.Fatal("no models")
 	}
 	for _, info := range infos {
-		if !strings.HasPrefix(info.ID, "agy/") {
-			t.Fatalf("model registration must include provider prefix, got %+v", info)
-		}
-		if strings.Count(info.ID, "/") != 1 {
-			t.Fatalf("model registration duplicated provider prefix, got %+v", info)
+		if strings.Contains(info.ID, "/") {
+			t.Fatalf("CPA registration must receive a bare model ID, got %+v", info)
 		}
 	}
 }
@@ -279,11 +276,8 @@ func TestExecutorWithholdsModelsWhileMirroredProviderIsLive(t *testing.T) {
 		t.Fatalf("namespaced model count = %d, want 3", len(served.Models))
 	}
 	for _, model := range served.Models {
-		if !strings.HasPrefix(model.ID, "spike./") {
-			t.Fatalf("model registration must include namespace prefix, got %q", model.ID)
-		}
-		if strings.Count(model.ID, "/") != 1 {
-			t.Fatalf("model registration duplicated namespace prefix, got %q", model.ID)
+		if strings.Contains(model.ID, "/") {
+			t.Fatalf("CPA registration must receive a bare model ID, got %q", model.ID)
 		}
 	}
 }

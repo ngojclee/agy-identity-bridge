@@ -287,23 +287,12 @@ func (s providerSpec) modelInfos(namespace string) []modelInfo {
 	return out
 }
 
-// modelInfosForRegistration returns the IDs that the plugin host actually
-// registers in CPA's global model registry. Executor plugins are registered
-// directly by pluginhost and do not receive the auth record prefix
-// automatically.
+// modelInfosForRegistration returns bare model IDs for CPA's plugin host.
+// CPA reconciles these IDs through the plugin-owned auth record and applies
+// that record's prefix itself. Returning prefixed IDs here would produce
+// duplicate public IDs such as agy/agy/model.
 func (s providerSpec) modelInfosForRegistration(namespace string) []modelInfo {
-	out := s.modelInfos(namespace)
-	prefix := modelNamespace(namespace, s.Prefix)
-	if prefix == "" {
-		return out
-	}
-	for index := range out {
-		if out[index].ID == "" {
-			continue
-		}
-		out[index].ID = prefix + "/" + out[index].ID
-	}
-	return out
+	return s.modelInfos(namespace)
 }
 
 // modelNamespace selects the prefix written to the plugin-owned auth record.
