@@ -415,23 +415,23 @@ func normalizeUsageFilter(values url.Values) usageFilter {
 		Source: strings.TrimSpace(values.Get("source")),
 	}
 	switch filter.Period {
-	case "", "current_month", "month":
+	case "current_month", "month":
 		filter.Period = "current_month"
+	case "", "last_30_days", "30d":
+		filter.Period = "last_30_days"
 	case "last_5_hours", "5h":
 		filter.Period = "last_5_hours"
 	case "last_7_days", "7d":
 		filter.Period = "last_7_days"
-	case "last_30_days", "30d":
-		filter.Period = "last_30_days"
 	case "all", "all_time":
 		filter.Period = "all_time"
 	default:
-		filter.Period = "current_month"
+		filter.Period = "last_30_days"
 	}
 	switch filter.Bucket {
-	case "", "hour":
+	case "hour":
 		filter.Bucket = "hour"
-	case "day":
+	case "", "day":
 		filter.Bucket = "day"
 	case "minute":
 		filter.Bucket = "minute"
@@ -440,7 +440,7 @@ func normalizeUsageFilter(values url.Values) usageFilter {
 	case "month":
 		filter.Bucket = "month"
 	default:
-		filter.Bucket = "hour"
+		filter.Bucket = "day"
 	}
 	if filter.Source == "" {
 		filter.Source = "all"
@@ -1100,6 +1100,11 @@ a{color:inherit;text-decoration:none}
 .field{margin-bottom:12px}.field label{display:block;font-size:12px;font-weight:650;color:var(--ink-2);margin-bottom:5px}
 .field select{width:100%%;border:1px solid var(--line-2);background:#fff;border-radius:6px;color:var(--ink);padding:8px 9px}
 .filters{display:grid;grid-template-columns:1fr;gap:10px}
+.usage-filters{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;margin:0 0 14px}
+.usage-filters label{display:block}
+.usage-filters label span{display:block;font-size:11px;color:var(--ink-3);font-weight:700;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
+.usage-filters select{width:100%%;min-height:36px;border:1px solid var(--line-2);background:#fff;border-radius:8px;padding:8px 10px;color:var(--ink);cursor:pointer;font:inherit}
+.usage-filters .btn{height:36px;min-height:36px;align-self:end}
 .record{border:1px solid var(--line);border-radius:8px;background:var(--inset);padding:10px;margin-bottom:8px}
 .record-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:6px}
 .record-main{font-weight:700}
@@ -1111,7 +1116,7 @@ a{color:inherit;text-decoration:none}
 .group{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
 .group strong{font-size:13px}
 .group span{color:var(--ink-2);font-size:12px}
-@media(max-width:960px){.shell{grid-template-columns:1fr}.drawer{border-left:0;border-top:1px solid var(--line);min-height:auto}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.content{padding:16px}.drawer-body{padding:14px}}
+@media(max-width:960px){.shell{grid-template-columns:1fr}.drawer{border-left:0;border-top:1px solid var(--line);min-height:auto}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.content{padding:16px}.drawer-body{padding:14px}.usage-filters{grid-template-columns:1fr 1fr}.usage-filters .btn{width:100%%}}
 </style>
 </head>
 <body>
