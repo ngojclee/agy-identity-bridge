@@ -382,6 +382,25 @@ func rewritePayloadModel(payload []byte, prefix string) []byte {
 	return out
 }
 
+func forceStreamingPayload(payload []byte) []byte {
+	if len(payload) == 0 {
+		return payload
+	}
+	var body map[string]any
+	if errUnmarshal := json.Unmarshal(payload, &body); errUnmarshal != nil {
+		return payload
+	}
+	if current, ok := body["stream"].(bool); ok && current {
+		return payload
+	}
+	body["stream"] = true
+	out, errMarshal := json.Marshal(body)
+	if errMarshal != nil {
+		return payload
+	}
+	return out
+}
+
 func handleExecutorIdentifier() []byte {
 	settings := currentPluginSettings()
 	return okEnvelope(map[string]string{"identifier": settings.ExecutorProvider})
@@ -435,6 +454,10 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 		return errorEnvelope("provider_unresolved", "no mirrored provider is configured"), nil
 	}
 	normalizeExecutorModel(&req, spec)
+	// CPA may select execute_stream for a request whose original payload did
+	// not carry stream=true. The host stream callback requires an actual
+	// upstream stream, so make the agy2api request streaming as well.
+	req.Payload = forceStreamingPayload(req.Payload)
 	identity := identityFromExecutorRequest(req)
 	upstream, errBuild := buildUpstreamRequest(req, spec, identity)
 	if errBuild != nil {

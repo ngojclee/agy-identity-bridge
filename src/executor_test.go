@@ -156,6 +156,28 @@ func TestExecutorStripsPublishedPrefixBeforeCallingAgy2api(t *testing.T) {
 	}
 }
 
+func TestForceStreamingPayload(t *testing.T) {
+	input := []byte(`{"model":"gemini-3.7-flash-high","messages":[]}`)
+	output := forceStreamingPayload(input)
+	var body map[string]any
+	if err := json.Unmarshal(output, &body); err != nil {
+		t.Fatal(err)
+	}
+	if streamed, ok := body["stream"].(bool); !ok || !streamed {
+		t.Fatalf("stream flag = %#v, want true", body["stream"])
+	}
+
+	alreadyStreaming := []byte(`{"stream":true,"messages":[]}`)
+	if got := string(forceStreamingPayload(alreadyStreaming)); got != string(alreadyStreaming) {
+		t.Fatalf("already-streaming payload changed: %s", got)
+	}
+
+	invalid := []byte(`not-json`)
+	if got := string(forceStreamingPayload(invalid)); got != string(invalid) {
+		t.Fatalf("invalid payload should pass through unchanged: %s", got)
+	}
+}
+
 func TestModelNamespaceOverridesOriginalPrefixForExecutor(t *testing.T) {
 	loadMirror(t)
 	root, _ := parseYAMLMap([]byte(mirrorConfigYAML))
