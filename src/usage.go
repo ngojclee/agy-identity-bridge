@@ -88,11 +88,13 @@ func resetUsageState() {
 // directory if the config path is unavailable.
 func usageDataPath() string {
 	for _, candidate := range []string{
+		"/CLIProxyAPI/plugins",
 		os.Getenv("CPA_CONFIG_PATH"),
-		"/CLIProxyAPI/config.yaml",
-		"/cpa-config.yaml",
 	} {
-		dir := filepath.Dir(strings.TrimSpace(candidate))
+		dir := strings.TrimSpace(candidate)
+		if info, errStat := os.Stat(dir); errStat == nil && info.IsDir() {
+			return filepath.Join(dir, "agy-identity-bridge-usage.json")
+		}
 		if dir != "" && dir != "." {
 			return filepath.Join(dir, "agy-identity-bridge-usage.json")
 		}
@@ -1103,8 +1105,8 @@ a{color:inherit;text-decoration:none}
 .usage-filters{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:12px;align-items:end;margin:0 0 14px}
 .usage-filters label{display:block}
 .usage-filters label span{display:block;font-size:11px;color:var(--ink-3);font-weight:700;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em}
-.usage-filters select{width:100%%;min-height:36px;border:1px solid var(--line-2);background:#fff;border-radius:8px;padding:8px 10px;color:var(--ink);cursor:pointer;font:inherit}
-.usage-filters .btn{height:36px;min-height:36px;align-self:end}
+.usage-filters select{width:100%%;min-height:38px;border:1px solid var(--line-2);background:#fff;border-radius:8px;padding:8px 10px;color:var(--ink);cursor:pointer;font:inherit}
+.usage-filters .btn{height:38px;min-height:38px;align-self:end;padding:0 14px;font-size:13px}
 .record{border:1px solid var(--line);border-radius:8px;background:var(--inset);padding:10px;margin-bottom:8px}
 .record-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:6px}
 .record-main{font-weight:700}
