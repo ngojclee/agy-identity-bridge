@@ -629,6 +629,7 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 	// long thinking requests where a full batch would otherwise look stalled.
 	emitStreamID := req.StreamID
 	usedEmit := false
+	ssePending := ""
 	closeHostStreamEmit := func(errorMessage string) {
 		if emitStreamID == "" {
 			return
@@ -671,16 +672,35 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 			streamUsageBuffer = append(streamUsageBuffer, payload...)
 			streamUsageBuffer = append(streamUsageBuffer, '\n')
 			if emitStreamID != "" {
-				emitPayload, errMarshal := json.Marshal(map[string]any{
-					"stream_id": emitStreamID,
-					"payload":   payload,
-				})
-				if errMarshal == nil {
-					if _, errEmit := hostCall(pluginabi.MethodHostStreamEmit, emitPayload); errEmit != nil {
-						closeHostStreamEmit("")
-						emitStreamID = ""
-					} else {
-						usedEmit = true
+				// CPA's stream bridge wraps each emitted chunk in its own SSE
+				// data frame, so the plugin must strip the upstream SSE framing
+				// (data: prefix and blank-line separators) and emit only the
+				// JSON content. data: [DONE] is skipped because CPA adds its
+				// own done tail after the bridge stream closes.
+				ssePending += string(payload)
+				lines := strings.Split(ssePending, "\n")
+				ssePending = lines[len(lines)-1]
+				for _, line := range lines[:len(lines)-1] {
+					trimmed := strings.TrimSpace(line)
+					if !strings.HasPrefix(trimmed, "data: ") {
+						continue
+					}
+					jsonContent := strings.TrimPrefix(trimmed, "data: ")
+					if jsonContent == "[DONE]" || jsonContent == "" {
+						continue
+					}
+					emitPayload, errMarshal := json.Marshal(map[string]any{
+						"stream_id": emitStreamID,
+						"payload":   []byte(jsonContent),
+					})
+					if errMarshal == nil {
+						if _, errEmit := hostCall(pluginabi.MethodHostStreamEmit, emitPayload); errEmit != nil {
+							closeHostStreamEmit("")
+							emitStreamID = ""
+							break
+						} else {
+							usedEmit = true
+						}
 					}
 				}
 			}
