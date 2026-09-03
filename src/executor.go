@@ -428,6 +428,102 @@ func boolFromKeys(keys map[string]json.RawMessage, names ...string) (bool, bool)
 	return false, false
 }
 
+// sseStreamParser reassembles complete SSE events from upstream reads that may
+// split a frame anywhere. It exists so the bridge never loses an upstream
+// frame: multi-line data fields are rejoined per the SSE spec, and both the
+// "data: x" and "data:x" spellings are accepted, because a strict prefix test
+// on one spelling silently discards the other.
+type sseStreamParser struct {
+	pending string
+}
+
+func (p *sseStreamParser) feed(chunk []byte) [][]byte {
+	if len(chunk) > 0 {
+		p.pending += strings.ReplaceAll(string(chunk), "\r\n", "\n")
+	}
+	return p.drain(false)
+}
+
+// flush processes whatever is left when the upstream stream ends, so a final
+// event that arrived without its trailing blank line is still delivered.
+func (p *sseStreamParser) flush() [][]byte {
+	return p.drain(true)
+}
+
+func (p *sseStreamParser) drain(final bool) [][]byte {
+	var out [][]byte
+	for {
+		end := strings.Index(p.pending, "\n\n")
+		if end < 0 {
+			break
+		}
+		block := p.pending[:end]
+		p.pending = p.pending[end+2:]
+		if payload, ok := sseEventPayload(block); ok {
+			out = append(out, payload)
+		}
+	}
+	if final {
+		rest := p.pending
+		p.pending = ""
+		if payload, ok := sseEventPayload(rest); ok {
+			out = append(out, payload)
+		}
+	}
+	return out
+}
+
+// sseEventPayload returns the data carried by one SSE event block. ok is false
+// for frames with no data field, such as a bare event: or a keep-alive
+// comment; those carry nothing a chat client can render.
+func sseEventPayload(block string) ([]byte, bool) {
+	var data []string
+	for _, line := range strings.Split(block, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, ":") {
+			continue
+		}
+		if !strings.HasPrefix(trimmed, "data:") {
+			continue
+		}
+		value := strings.TrimPrefix(trimmed, "data:")
+		value = strings.TrimPrefix(value, " ")
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		data = append(data, value)
+	}
+	if len(data) == 0 {
+		return nil, false
+	}
+	joined := strings.Join(data, "\n")
+	if strings.TrimSpace(joined) == "[DONE]" {
+		return nil, false
+	}
+	return []byte(joined), true
+}
+
+// emitUpstreamEvents forwards completed upstream events through the host
+// stream bridge in arrival order and reports how many were accepted. ok turns
+// false as soon as the bridge rejects one, so the caller stops emitting
+// instead of spinning against a closed stream.
+func emitUpstreamEvents(streamID string, events [][]byte) (emitted int, ok bool) {
+	for _, event := range events {
+		emitPayload, errMarshal := json.Marshal(map[string]any{
+			"stream_id": streamID,
+			"payload":   event,
+		})
+		if errMarshal != nil {
+			continue
+		}
+		if _, errEmit := hostCall(pluginabi.MethodHostStreamEmit, emitPayload); errEmit != nil {
+			return emitted, false
+		}
+		emitted++
+	}
+	return emitted, true
+}
+
 func b64(raw []byte) string {
 	if len(raw) == 0 {
 		return ""
@@ -453,13 +549,8 @@ func buildUpstreamRequest(req executorRequest, spec providerSpec, identity clien
 	if spec.primaryAPIKey() == "" {
 		return hostHTTPRequest{}, fmt.Errorf("mirrored provider has no API key configured")
 	}
-	endpoint := "/chat/completions"
+	endpoint := upstreamEndpoint(req.Model, req.Format, req.Alt, spec)
 	payload := rewritePayloadModel(req.Payload, settingsModelPrefix(currentPluginSettings(), spec))
-	// Image requests keep their own endpoint, which agy2api exposes the same
-	// way the provider config did.
-	if strings.Contains(req.Format, "image") || req.Alt == "openai-image" {
-		endpoint = "/images/generations"
-	}
 	headers := map[string][]string{
 		"Authorization": {fmt.Sprintf("Bearer %s", spec.primaryAPIKey())},
 		"Content-Type":  {"application/json"},
@@ -479,6 +570,48 @@ func buildUpstreamRequest(req executorRequest, spec providerSpec, identity clien
 
 func settingsModelPrefix(settings PluginSettings, spec providerSpec) string {
 	return modelNamespace(settings.ModelNamespace, spec.Prefix)
+}
+
+// The agy2api routes the bridge knows about, expressed relative to the
+// mirrored provider's base URL. agy2api verifies the canonical payload with
+// this same convention, so the value must stay base-relative and must not
+// grow the /v1 prefix that already lives in base_url.
+const (
+	chatCompletionsEndpoint  = "/chat/completions"
+	imageGenerationsEndpoint = "/images/generations"
+)
+
+// upstreamEndpoint is the single source of truth for which agy2api route a
+// request uses. The executor signs this value and the request interceptor must
+// sign the identical one: agy2api verifies a canonical payload that includes
+// the path, so a signature computed against a different endpoint fails
+// verification outright rather than just producing a bad audit record.
+func upstreamEndpoint(model, format, alt string, spec providerSpec) string {
+	if strings.Contains(strings.ToLower(format), "image") || strings.EqualFold(strings.TrimSpace(alt), "openai-image") {
+		return imageGenerationsEndpoint
+	}
+	if spec.servesImageModel(model) {
+		return imageGenerationsEndpoint
+	}
+	return chatCompletionsEndpoint
+}
+
+// servesImageModel reports whether the mirrored provider declares model with
+// image capability. model may still carry the public prefix at intercept time.
+func (s providerSpec) servesImageModel(model string) bool {
+	bare := strings.ToLower(strings.TrimSpace(stripModelPrefix(model, s.Prefix)))
+	if bare == "" {
+		return false
+	}
+	for _, item := range s.Models {
+		if !item.Image {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(item.Name), bare) || strings.EqualFold(strings.TrimSpace(item.Alias), bare) {
+			return true
+		}
+	}
+	return false
 }
 
 func stripModelPrefix(modelID, prefix string) string {
@@ -629,7 +762,7 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 	// long thinking requests where a full batch would otherwise look stalled.
 	emitStreamID := req.StreamID
 	usedEmit := false
-	ssePending := ""
+	sse := &sseStreamParser{}
 	closeHostStreamEmit := func(errorMessage string) {
 		if emitStreamID == "" {
 			return
@@ -673,40 +806,26 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 			streamUsageBuffer = append(streamUsageBuffer, '\n')
 			if emitStreamID != "" {
 				// CPA's stream bridge wraps each emitted chunk in its own SSE
-				// data frame, so the plugin must strip the upstream SSE framing
-				// (data: prefix and blank-line separators) and emit only the
-				// JSON content. data: [DONE] is skipped because CPA adds its
-				// own done tail after the bridge stream closes.
-				ssePending += string(payload)
-				lines := strings.Split(ssePending, "\n")
-				ssePending = lines[len(lines)-1]
-				for _, line := range lines[:len(lines)-1] {
-					trimmed := strings.TrimSpace(line)
-					if !strings.HasPrefix(trimmed, "data: ") {
-						continue
-					}
-					jsonContent := strings.TrimPrefix(trimmed, "data: ")
-					if jsonContent == "[DONE]" || jsonContent == "" {
-						continue
-					}
-					emitPayload, errMarshal := json.Marshal(map[string]any{
-						"stream_id": emitStreamID,
-						"payload":   []byte(jsonContent),
-					})
-					if errMarshal == nil {
-						if _, errEmit := hostCall(pluginabi.MethodHostStreamEmit, emitPayload); errEmit != nil {
-							closeHostStreamEmit("")
-							emitStreamID = ""
-							break
-						} else {
-							usedEmit = true
-						}
-					}
+				// data frame, so the plugin strips the upstream framing and
+				// emits one payload per completed event, in arrival order.
+				// [DONE] is skipped because CPA writes its own done tail.
+				emitted, accepted := emitUpstreamEvents(emitStreamID, sse.feed(payload))
+				usedEmit = usedEmit || emitted > 0
+				if !accepted {
+					closeHostStreamEmit("")
+					emitStreamID = ""
 				}
 			}
 		}
 		if read.Done {
 			break
+		}
+	}
+	if emitStreamID != "" {
+		emitted, accepted := emitUpstreamEvents(emitStreamID, sse.flush())
+		usedEmit = usedEmit || emitted > 0
+		if !accepted {
+			closeHostStreamEmit("")
 		}
 	}
 	recordUsageFromExecutorResponse(streamUsageBuffer, start.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "stream")

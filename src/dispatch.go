@@ -402,7 +402,13 @@ func handleInterceptAfter(request []byte) ([]byte, error) {
 		headers["X-AGY-Connector-Id"] = []string{identity.ConnectorID}
 	}
 	if secret := hmacSecretForCandidate(settings, candidate); secret != "" {
-		headers["X-AGY-Signature"] = []string{computeHMAC(identitySignatureMessage(identity, "POST", "/chat/completions"), secret)}
+		// The interceptor must sign the endpoint the request will actually
+		// reach, using the same helper the executor uses. Signing a fixed
+		// chat path makes agy2api reject every non-chat request whenever
+		// signature enforcement is on and the executor is not serving it.
+		spec, _ := resolveProviderSpec()
+		headers["X-AGY-Signature"] = []string{computeHMAC(identitySignatureMessage(identity, "POST",
+			upstreamEndpoint(payload.Model, payload.ToFormat, "", spec)), secret)}
 	}
 	return okEnvelope(InterceptResponsePayload{Headers: headers}), nil
 }
