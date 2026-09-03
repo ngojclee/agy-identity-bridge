@@ -111,6 +111,7 @@ type executorRequest struct {
 	Metadata        map[string]any
 	AuthAttributes  map[string]string
 	HostCallbackID  string
+	StreamID        string
 }
 
 func parseExecutorRequest(raw []byte) (executorRequest, error) {
@@ -130,6 +131,7 @@ func parseExecutorRequest(raw []byte) (executorRequest, error) {
 	req.Alt, _ = stringValue(decoded, "alt")
 	req.SourceFormat, _ = stringValue(decoded, "source_format")
 	req.HostCallbackID, _ = stringValue(decoded, "host_callback_id")
+	req.StreamID, _ = stringValue(decoded, "stream_id")
 	if value, ok := mapValue(decoded, "headers"); ok {
 		req.Headers = headerMapFromAny(asMap(value))
 	}
@@ -390,9 +392,40 @@ func headersFromKeys(keys map[string]json.RawMessage, names ...string) (map[stri
 }
 
 type hostHTTPStreamRead struct {
-	Payload string `json:"payload"`
-	Error   string `json:"error"`
-	Done    bool   `json:"done"`
+	Payload string
+	Error   string
+	Done    bool
+}
+
+func (r *hostHTTPStreamRead) UnmarshalJSON(data []byte) error {
+	keys, errDecode := decodeJSONKeys(data)
+	if errDecode != nil {
+		return errDecode
+	}
+	if payload, ok := stringFromKeys(keys, "payload", "Payload"); ok {
+		r.Payload = payload
+	}
+	if errMsg, ok := stringFromKeys(keys, "error", "Error"); ok {
+		r.Error = errMsg
+	}
+	if done, ok := boolFromKeys(keys, "done", "Done"); ok {
+		r.Done = done
+	}
+	return nil
+}
+
+func boolFromKeys(keys map[string]json.RawMessage, names ...string) (bool, bool) {
+	for _, name := range names {
+		raw, ok := keys[name]
+		if !ok {
+			continue
+		}
+		var value bool
+		if errUnmarshal := json.Unmarshal(raw, &value); errUnmarshal == nil {
+			return value, true
+		}
+	}
+	return false, false
 }
 
 func b64(raw []byte) string {
@@ -587,34 +620,84 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 		return errorEnvelope("upstream_stream_unavailable", "host returned no stream id"), nil
 	}
 
-	chunks := make([]streamChunk, 0, 32)
 	var streamUsageBuffer []byte
 	defer hostCall(pluginabi.MethodHostHTTPStreamClose, []byte(fmt.Sprintf(`{"stream_id":%q}`, start.StreamID)))
+	// Progressive streaming: when CPA opened a host stream bridge for this
+	// call, each upstream chunk is forwarded through host.stream.emit right
+	// away instead of batching until the upstream response ends. Clients then
+	// see the first token as soon as agy2api produces it, which matters for
+	// long thinking requests where a full batch would otherwise look stalled.
+	emitStreamID := req.StreamID
+	usedEmit := false
+	closeHostStreamEmit := func(errorMessage string) {
+		if emitStreamID == "" {
+			return
+		}
+		payload, errMarshal := json.Marshal(map[string]string{
+			"stream_id": emitStreamID,
+			"error":     errorMessage,
+		})
+		if errMarshal == nil {
+			_, _ = hostCall(pluginabi.MethodHostStreamClose, payload)
+		}
+	}
+	if emitStreamID == "" {
+		// Older CPA builds do not pass a bridge stream id; fall back to the
+		// previous batched response shape.
+		usedEmit = false
+	}
 	for {
 		readRaw, errRead := hostCall(pluginabi.MethodHostHTTPStreamRead, []byte(fmt.Sprintf(`{"stream_id":%q}`, start.StreamID)))
 		if errRead != nil {
+			if emitStreamID != "" {
+				closeHostStreamEmit(errRead.Error())
+			}
 			return errorEnvelope("upstream_stream_failed", errRead.Error()), nil
 		}
 		var read hostHTTPStreamRead
 		if errDecode := json.Unmarshal(readRaw, &read); errDecode != nil {
+			if emitStreamID != "" {
+				closeHostStreamEmit(errDecode.Error())
+			}
 			return errorEnvelope("upstream_stream_decode_failed", errDecode.Error()), nil
 		}
 		if read.Error != "" {
+			if emitStreamID != "" {
+				closeHostStreamEmit(read.Error)
+			}
 			return errorEnvelope("upstream_stream_error", read.Error), nil
 		}
 		if payload := unb64(read.Payload); len(payload) > 0 {
-			chunks = append(chunks, streamChunk{Payload: b64(payload)})
 			streamUsageBuffer = append(streamUsageBuffer, payload...)
 			streamUsageBuffer = append(streamUsageBuffer, '\n')
+			if emitStreamID != "" {
+				emitPayload, errMarshal := json.Marshal(map[string]any{
+					"stream_id": emitStreamID,
+					"payload":   payload,
+				})
+				if errMarshal == nil {
+					if _, errEmit := hostCall(pluginabi.MethodHostStreamEmit, emitPayload); errEmit != nil {
+						closeHostStreamEmit("")
+						emitStreamID = ""
+					} else {
+						usedEmit = true
+					}
+				}
+			}
 		}
 		if read.Done {
 			break
 		}
 	}
 	recordUsageFromExecutorResponse(streamUsageBuffer, start.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "stream")
+	if usedEmit {
+		return okEnvelope(executorEnvelope{
+			Headers: start.Headers,
+		}), nil
+	}
 	return okEnvelope(executorEnvelope{
 		Headers: start.Headers,
-		Chunks:  chunks,
+		Chunks:  []streamChunk{{Payload: b64(streamUsageBuffer)}},
 	}), nil
 }
 

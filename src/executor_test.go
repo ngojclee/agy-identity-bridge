@@ -30,6 +30,23 @@ func TestHostHTTPResponseAcceptsSnakeAndPascalKeys(t *testing.T) {
 	}
 }
 
+func TestHostHTTPStreamReadAcceptsSnakeAndPascalKeys(t *testing.T) {
+	var snake hostHTTPStreamRead
+	if errUnmarshal := json.Unmarshal([]byte(`{"payload":"YWJj","done":true}`), &snake); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	if snake.Payload != "YWJj" || !snake.Done || snake.Error != "" {
+		t.Fatalf("snake read = %+v", snake)
+	}
+	var pascal hostHTTPStreamRead
+	if errUnmarshal := json.Unmarshal([]byte(`{"Payload":"ZGVm","Error":"boom","Done":false}`), &pascal); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	if pascal.Payload != "ZGVm" || pascal.Error != "boom" || pascal.Done {
+		t.Fatalf("pascal read = %+v", pascal)
+	}
+}
+
 func TestExecutorRegistrationOnlyWhenEnabled(t *testing.T) {
 	loadMirror(t)
 	caps := registrationCapabilities()
