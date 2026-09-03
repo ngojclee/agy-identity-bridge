@@ -691,6 +691,10 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 	}
 	recordUsageFromExecutorResponse(streamUsageBuffer, start.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "stream")
 	if usedEmit {
+		// Success path: the bridge stream stays open until the plugin closes
+		// it, otherwise CPA keeps streaming keep-alive comments and clients
+		// wait for their own timeout instead of finishing cleanly.
+		closeHostStreamEmit("")
 		return okEnvelope(executorEnvelope{
 			Headers: start.Headers,
 		}), nil
