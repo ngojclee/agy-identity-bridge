@@ -594,9 +594,14 @@ const (
 // inbound path is matched against this set instead of being appended to the
 // base URL verbatim, so a crafted request path cannot steer the upstream URL
 // somewhere else.
+//
+// Only routes whose body reaches the executor in upstream shape belong here.
+// /v1/responses deliberately does not: CPA translates a Responses request into
+// a chat-completions payload before the executor sees it, so honouring the
+// inbound path would post a translated body to a route agy2api does not even
+// expose. That traffic falls through to the chat-completions default instead.
 var knownUpstreamRoutes = map[string]string{
 	chatCompletionsEndpoint:  chatCompletionsEndpoint,
-	"/responses":             "/responses",
 	imageGenerationsEndpoint: imageGenerationsEndpoint,
 	imageEditsEndpoint:       imageEditsEndpoint,
 }

@@ -18,6 +18,10 @@ func TestRouteFromRequestPath(t *testing.T) {
 		{"/v1/images/generations", imageGenerationsEndpoint},
 		{"/v1/chat/completions", chatCompletionsEndpoint},
 		{"/images/edits", imageEditsEndpoint},
+		// CPA translates a Responses request into a chat-completions payload
+		// before the executor runs, and agy2api exposes no /responses route,
+		// so the inbound path must not be honoured here.
+		{"/v1/responses", ""},
 		{"/v1/../admin/secrets", ""},
 		{"/v1/images/edits/../../x", ""},
 		{"", ""},
@@ -44,6 +48,11 @@ func TestUpstreamEndpointPrefersRealInboundPathOverHeuristic(t *testing.T) {
 	// Without a path the historical generations default must survive.
 	if got := upstreamEndpoint("gemini-image", "openai-image", "", "", spec); got != imageGenerationsEndpoint {
 		t.Fatalf("pathless image traffic routed to %q, want %q", got, imageGenerationsEndpoint)
+	}
+	// A translated Responses request must still reach the chat route, because
+	// the inbound path describes what the client called, not what agy2api got.
+	if got := upstreamEndpoint("gemini-3.8-flash-high", "chat-completions", "", "/v1/responses", spec); got != chatCompletionsEndpoint {
+		t.Fatalf("responses traffic routed to %q, want %q", got, chatCompletionsEndpoint)
 	}
 }
 
