@@ -31,7 +31,7 @@ func TestUpstreamEndpointMatchesImageCapability(t *testing.T) {
 		{"unknown model defaults to chat", "not-registered", "", "", chatCompletionsEndpoint},
 	}
 	for _, tc := range cases {
-		if got := upstreamEndpoint(tc.model, tc.format, tc.alt, spec); got != tc.want {
+		if got := upstreamEndpoint(tc.model, tc.format, tc.alt, "", spec); got != tc.want {
 			t.Errorf("%s: upstreamEndpoint(%q,%q,%q) = %q, want %q", tc.name, tc.model, tc.format, tc.alt, got, tc.want)
 		}
 	}
@@ -51,7 +51,7 @@ func TestIdentitySignatureCoversRealImageRoute(t *testing.T) {
 		ClientApp:      "hermes",
 		ClientInstance: "inst-1",
 	}
-	message := identitySignatureMessage(identity, "POST", upstreamEndpoint("gemini-image", "", "", spec))
+	message := identitySignatureMessage(identity, "POST", upstreamEndpoint("gemini-image", "", "", "", spec))
 
 	if !strings.Contains(message, "path=/images/generations") {
 		t.Fatalf("signature payload must carry the real image route, got %q", message)

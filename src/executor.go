@@ -549,12 +549,20 @@ func buildUpstreamRequest(req executorRequest, spec providerSpec, identity clien
 	if spec.primaryAPIKey() == "" {
 		return hostHTTPRequest{}, fmt.Errorf("mirrored provider has no API key configured")
 	}
-	endpoint := upstreamEndpoint(req.Model, req.Format, req.Alt, spec)
+	endpoint := upstreamEndpoint(req.Model, req.Format, req.Alt, requestPathFromMetadata(req.Metadata), spec)
 	payload := rewritePayloadModel(req.Payload, settingsModelPrefix(currentPluginSettings(), spec))
 	headers := map[string][]string{
 		"Authorization": {fmt.Sprintf("Bearer %s", spec.primaryAPIKey())},
-		"Content-Type":  {"application/json"},
 		"User-Agent":    {"agy-identity-bridge-executor"},
+	}
+	// The inbound content type has to survive the hop. CPA rewrites multipart
+	// image edits into its own multipart body with a fresh boundary, so
+	// hardcoding application/json labels multipart bytes as JSON and the
+	// upstream rejects the body before any handler runs.
+	if contentType := firstHeaderValue(req.Headers, "Content-Type"); contentType != "" {
+		headers["Content-Type"] = []string{contentType}
+	} else {
+		headers["Content-Type"] = []string{"application/json"}
 	}
 	for key, values := range identityHeaders(identity, spec, req, "POST", endpoint) {
 		headers[key] = values
@@ -579,14 +587,69 @@ func settingsModelPrefix(settings PluginSettings, spec providerSpec) string {
 const (
 	chatCompletionsEndpoint  = "/chat/completions"
 	imageGenerationsEndpoint = "/images/generations"
+	imageEditsEndpoint       = "/images/edits"
 )
+
+// knownUpstreamRoutes are the agy2api routes the bridge may target. The
+// inbound path is matched against this set instead of being appended to the
+// base URL verbatim, so a crafted request path cannot steer the upstream URL
+// somewhere else.
+var knownUpstreamRoutes = map[string]string{
+	chatCompletionsEndpoint:  chatCompletionsEndpoint,
+	"/responses":             "/responses",
+	imageGenerationsEndpoint: imageGenerationsEndpoint,
+	imageEditsEndpoint:       imageEditsEndpoint,
+}
+
+// requestPathFromMetadata reads the inbound HTTP path CPA attaches to every
+// HTTP-originated execution. It is the only reliable way to tell an image edit
+// from an image generation, because both arrive as image traffic and only the
+// edit carries a multipart body.
+func requestPathFromMetadata(metadata map[string]any) string {
+	if metadata == nil {
+		return ""
+	}
+	value, ok := metadata["request_path"]
+	if !ok {
+		return ""
+	}
+	text, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(text)
+}
+
+// routeFromRequestPath maps an inbound path onto a known base-relative route,
+// or returns "" when the path is absent or unrecognised.
+func routeFromRequestPath(requestPath string) string {
+	path := strings.ToLower(strings.TrimSpace(requestPath))
+	if path == "" || !strings.HasPrefix(path, "/") {
+		return ""
+	}
+	if trimmed, cut := strings.CutPrefix(path, "/v1"); cut {
+		path = trimmed
+	}
+	if route, ok := knownUpstreamRoutes[path]; ok {
+		return route
+	}
+	return ""
+}
 
 // upstreamEndpoint is the single source of truth for which agy2api route a
 // request uses. The executor signs this value and the request interceptor must
 // sign the identical one: agy2api verifies a canonical payload that includes
 // the path, so a signature computed against a different endpoint fails
 // verification outright rather than just producing a bad audit record.
-func upstreamEndpoint(model, format, alt string, spec providerSpec) string {
+//
+// The inbound path wins whenever CPA supplied one. The format and capability
+// heuristics remain the fallback for hosts that do not, and deliberately keep
+// the historical behaviour of sending image traffic to generations, which is
+// the only route that can be served from a JSON body.
+func upstreamEndpoint(model, format, alt, requestPath string, spec providerSpec) string {
+	if route := routeFromRequestPath(requestPath); route != "" {
+		return route
+	}
 	if strings.Contains(strings.ToLower(format), "image") || strings.EqualFold(strings.TrimSpace(alt), "openai-image") {
 		return imageGenerationsEndpoint
 	}
