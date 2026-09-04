@@ -150,6 +150,12 @@ CPA's public `/v1/models` response currently exposes only basic model fields,
 so effort controls are not discoverable through CPA until CPA itself forwards
 that metadata.
 
+For streaming, when CPA supplies a bridge `stream_id`, the plugin returns from
+`executor.execute_stream` immediately and continues pumping upstream SSE events
+through `host.stream.emit` in a goroutine. CPA's RPC adapter cannot expose the
+bridge channel to the HTTP response writer until the executor call returns, so
+returning late turns progressive emit into full-response batching.
+
 CPA calls both interceptor phases. The plugin handles `request.intercept_before`
 as an intentional no-op because provider identity and the selected client
 credential are only available in the after-auth phase, where the identity

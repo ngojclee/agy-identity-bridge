@@ -971,95 +971,121 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 		return errorEnvelope("upstream_stream_unavailable", "host returned no stream id"), nil
 	}
 
+	// CPA's RPC adapter cannot hand the downstream stream channel to the HTTP
+	// response writer until executor.execute_stream returns. When the host
+	// supplied a bridge stream id, return immediately and keep pumping chunks
+	// from a goroutine; otherwise the bridge buffer is drained only after the
+	// upstream response ends, which looks exactly like full-response batching.
+	if executorStreamShouldReturnEarly(req) {
+		go pumpExecutorStreamToBridge(strings.TrimSpace(req.StreamID), start, spec, identity, visibleModel)
+		return okEnvelope(executorEnvelope{Headers: start.Headers}), nil
+	}
+	return executorStreamBatched(start, spec, identity, visibleModel)
+}
+
+func executorStreamShouldReturnEarly(req executorRequest) bool {
+	return strings.TrimSpace(req.StreamID) != ""
+}
+
+func executorStreamBatched(start hostHTTPStreamStart, spec providerSpec, identity clientIdentity, visibleModel string) ([]byte, error) {
 	var streamUsageBuffer []byte
 	defer hostCall(pluginabi.MethodHostHTTPStreamClose, []byte(fmt.Sprintf(`{"stream_id":%q}`, start.StreamID)))
-	// Progressive streaming: when CPA opened a host stream bridge for this
-	// call, each upstream chunk is forwarded through host.stream.emit right
-	// away instead of batching until the upstream response ends. Clients then
-	// see the first token as soon as agy2api produces it, which matters for
-	// long thinking requests where a full batch would otherwise look stalled.
-	emitStreamID := req.StreamID
-	usedEmit := false
-	sse := &sseStreamParser{}
-	closeHostStreamEmit := func(errorMessage string) {
-		if emitStreamID == "" {
-			return
-		}
-		payload, errMarshal := json.Marshal(map[string]string{
-			"stream_id": emitStreamID,
-			"error":     errorMessage,
-		})
-		if errMarshal == nil {
-			_, _ = hostCall(pluginabi.MethodHostStreamClose, payload)
-		}
-	}
-	if emitStreamID == "" {
-		// Older CPA builds do not pass a bridge stream id; fall back to the
-		// previous batched response shape.
-		usedEmit = false
-	}
 	for {
 		readRaw, errRead := hostCall(pluginabi.MethodHostHTTPStreamRead, []byte(fmt.Sprintf(`{"stream_id":%q}`, start.StreamID)))
 		if errRead != nil {
-			if emitStreamID != "" {
-				closeHostStreamEmit(errRead.Error())
-			}
 			return errorEnvelope("upstream_stream_failed", errRead.Error()), nil
 		}
 		var read hostHTTPStreamRead
 		if errDecode := json.Unmarshal(readRaw, &read); errDecode != nil {
-			if emitStreamID != "" {
-				closeHostStreamEmit(errDecode.Error())
-			}
 			return errorEnvelope("upstream_stream_decode_failed", errDecode.Error()), nil
 		}
 		if read.Error != "" {
-			if emitStreamID != "" {
-				closeHostStreamEmit(read.Error)
-			}
 			return errorEnvelope("upstream_stream_error", read.Error), nil
 		}
 		if payload := unb64(read.Payload); len(payload) > 0 {
 			streamUsageBuffer = append(streamUsageBuffer, payload...)
 			streamUsageBuffer = append(streamUsageBuffer, '\n')
-			if emitStreamID != "" {
-				// CPA's stream bridge wraps each emitted chunk in its own SSE
-				// data frame, so the plugin strips the upstream framing and
-				// emits one payload per completed event, in arrival order.
-				// [DONE] is skipped because CPA writes its own done tail.
-				emitted, accepted := emitUpstreamEvents(emitStreamID, sse.feed(payload))
-				usedEmit = usedEmit || emitted > 0
-				if !accepted {
-					closeHostStreamEmit("")
-					emitStreamID = ""
-				}
+		}
+		if read.Done {
+			break
+		}
+	}
+	recordUsageFromExecutorResponse(streamUsageBuffer, start.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "stream")
+	return okEnvelope(executorEnvelope{
+		Headers: start.Headers,
+		Chunks:  []streamChunk{{Payload: b64(streamUsageBuffer)}},
+	}), nil
+}
+
+func pumpExecutorStreamToBridge(emitStreamID string, start hostHTTPStreamStart, spec providerSpec, identity clientIdentity, visibleModel string) {
+	var streamUsageBuffer []byte
+	var closeOnce sync.Once
+	closeBridge := func(errorMessage string) {
+		closeOnce.Do(func() {
+			payload, errMarshal := json.Marshal(map[string]string{
+				"stream_id": emitStreamID,
+				"error":     errorMessage,
+			})
+			if errMarshal == nil {
+				_, _ = hostCall(pluginabi.MethodHostStreamClose, payload)
+			}
+		})
+	}
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			recordUsageFromExecutorResponse(streamUsageBuffer, start.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "stream")
+			closeBridge(fmt.Sprintf("plugin stream panic: %v", recovered))
+			hostLog("error", "executor stream pump panicked", map[string]any{
+				"model": visibleModel,
+			})
+		}
+	}()
+	defer closeBridge("")
+	defer hostCall(pluginabi.MethodHostHTTPStreamClose, []byte(fmt.Sprintf(`{"stream_id":%q}`, start.StreamID)))
+
+	sse := &sseStreamParser{}
+	for {
+		readRaw, errRead := hostCall(pluginabi.MethodHostHTTPStreamRead, []byte(fmt.Sprintf(`{"stream_id":%q}`, start.StreamID)))
+		if errRead != nil {
+			recordUsageFromExecutorResponse(streamUsageBuffer, start.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "stream")
+			closeBridge(errRead.Error())
+			return
+		}
+		var read hostHTTPStreamRead
+		if errDecode := json.Unmarshal(readRaw, &read); errDecode != nil {
+			recordUsageFromExecutorResponse(streamUsageBuffer, start.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "stream")
+			closeBridge(errDecode.Error())
+			return
+		}
+		if read.Error != "" {
+			recordUsageFromExecutorResponse(streamUsageBuffer, start.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "stream")
+			closeBridge(read.Error)
+			return
+		}
+		if payload := unb64(read.Payload); len(payload) > 0 {
+			streamUsageBuffer = append(streamUsageBuffer, payload...)
+			streamUsageBuffer = append(streamUsageBuffer, '\n')
+			// CPA's stream bridge wraps each emitted chunk in its own SSE data
+			// frame, so the plugin strips the upstream framing and emits one
+			// payload per completed event, in arrival order. [DONE] is skipped
+			// because CPA writes its own done tail.
+			if _, accepted := emitUpstreamEvents(emitStreamID, sse.feed(payload)); !accepted {
+				recordUsageFromExecutorResponse(streamUsageBuffer, start.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "stream")
+				closeBridge("host stream emit failed")
+				return
 			}
 		}
 		if read.Done {
 			break
 		}
 	}
-	if emitStreamID != "" {
-		emitted, accepted := emitUpstreamEvents(emitStreamID, sse.flush())
-		usedEmit = usedEmit || emitted > 0
-		if !accepted {
-			closeHostStreamEmit("")
-		}
+	if _, accepted := emitUpstreamEvents(emitStreamID, sse.flush()); !accepted {
+		recordUsageFromExecutorResponse(streamUsageBuffer, start.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "stream")
+		closeBridge("host stream emit failed")
+		return
 	}
 	recordUsageFromExecutorResponse(streamUsageBuffer, start.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "stream")
-	if usedEmit {
-		// Success path: the bridge stream stays open until the plugin closes
-		// it, otherwise CPA keeps streaming keep-alive comments and clients
-		// wait for their own timeout instead of finishing cleanly.
-		closeHostStreamEmit("")
-		return okEnvelope(executorEnvelope{
-			Headers: start.Headers,
-		}), nil
-	}
-	return okEnvelope(executorEnvelope{
-		Headers: start.Headers,
-		Chunks:  []streamChunk{{Payload: b64(streamUsageBuffer)}},
-	}), nil
+	closeBridge("")
 }
 
 func handleExecutorCountTokens(raw []byte) ([]byte, error) {

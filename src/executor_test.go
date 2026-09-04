@@ -98,6 +98,30 @@ func TestParseExecutorRequestAcceptsCPAGoStyleKeys(t *testing.T) {
 	}
 }
 
+func TestParseExecutorRequestAcceptsStreamIDShapes(t *testing.T) {
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "snake", raw: `{"Model":"m","stream_id":"s-snake"}`, want: "s-snake"},
+		{name: "pascal", raw: `{"Model":"m","StreamID":"s-pascal"}`, want: "s-pascal"},
+		{name: "missing", raw: `{"Model":"m"}`, want: ""},
+	}
+	for _, tc := range tests {
+		req, errParse := parseExecutorRequest([]byte(tc.raw))
+		if errParse != nil {
+			t.Fatalf("%s: %v", tc.name, errParse)
+		}
+		if req.StreamID != tc.want {
+			t.Fatalf("%s StreamID = %q, want %q", tc.name, req.StreamID, tc.want)
+		}
+		if got := executorStreamShouldReturnEarly(req); got != (tc.want != "") {
+			t.Fatalf("%s early return = %v, want %v", tc.name, got, tc.want != "")
+		}
+	}
+}
+
 func TestBuildUpstreamRequestAttachesIdentityHeaders(t *testing.T) {
 	loadMirror(t)
 	settings := currentPluginSettings()
