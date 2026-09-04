@@ -257,6 +257,69 @@ func TestExecutorPayloadEffortWinsOverModelSuffix(t *testing.T) {
 	}
 }
 
+func TestExecutorLeavesImageLaneModelUnchanged(t *testing.T) {
+	loadMirror(t)
+	root, _ := parseYAMLMap([]byte(mirrorConfigYAML))
+	spec, found := extractProviderSpec(root, currentPluginSettings())
+	if !found {
+		t.Fatal("no mirrored provider")
+	}
+	req := executorRequest{
+		Model:   "agy/gemini-image",
+		Payload: []byte(`{"model":"agy/gemini-image","messages":[]}`),
+		Metadata: map[string]any{
+			"reasoning_effort": "high",
+		},
+	}
+	normalizeExecutorModel(&req, spec)
+	if req.Model != "gemini-image" {
+		t.Fatalf("image model = %q, want gemini-image", req.Model)
+	}
+	var body map[string]any
+	if errJSON := json.Unmarshal(req.Payload, &body); errJSON != nil {
+		t.Fatal(errJSON)
+	}
+	if body["model"] != "gemini-image" {
+		t.Fatalf("payload model = %#v", body["model"])
+	}
+	if _, exists := body["reasoning_effort"]; exists {
+		t.Fatalf("image payload received effort metadata: %#v", body["reasoning_effort"])
+	}
+}
+
+func TestBuildUpstreamRequestUsesChatPathForImageChatRequest(t *testing.T) {
+	loadMirror(t)
+	root, _ := parseYAMLMap([]byte(mirrorConfigYAML))
+	spec, found := extractProviderSpec(root, currentPluginSettings())
+	if !found {
+		t.Fatal("no mirrored provider")
+	}
+	req := executorRequest{
+		Model:    "gemini-image",
+		Format:   "openai",
+		Payload:  []byte(`{"model":"gemini-image","messages":[]}`),
+		Metadata: map[string]any{"request_path": "/v1/chat/completions"},
+	}
+	normalizeExecutorModel(&req, spec)
+	built, errBuild := buildUpstreamRequest(req, spec, identityFromExecutorRequest(req))
+	if errBuild != nil {
+		t.Fatal(errBuild)
+	}
+	if !strings.HasSuffix(built.URL, chatCompletionsEndpoint) {
+		t.Fatalf("image chat request routed to %q, want %q", built.URL, chatCompletionsEndpoint)
+	}
+	var body map[string]any
+	if errJSON := json.Unmarshal(unb64(built.Body), &body); errJSON != nil {
+		t.Fatal(errJSON)
+	}
+	if body["model"] != "gemini-image" {
+		t.Fatalf("upstream payload model = %#v", body["model"])
+	}
+	if _, exists := body["reasoning_effort"]; exists {
+		t.Fatalf("upstream image payload received effort: %#v", body["reasoning_effort"])
+	}
+}
+
 func TestExecutorNormalizesPayloadSuffixWithBareModelNamespace(t *testing.T) {
 	loadMirror(t)
 	root, _ := parseYAMLMap([]byte(mirrorConfigYAML))

@@ -551,7 +551,7 @@ func buildUpstreamRequest(req executorRequest, spec providerSpec, identity clien
 		return hostHTTPRequest{}, fmt.Errorf("mirrored provider has no API key configured")
 	}
 	endpoint := upstreamEndpoint(req.Model, req.Format, req.Alt, requestPathFromMetadata(req.Metadata), spec)
-	payload := rewritePayloadModel(req.Payload, settingsModelPrefix(currentPluginSettings(), spec))
+	payload := stripPayloadModelPrefix(req.Payload, settingsModelPrefix(currentPluginSettings(), spec))
 	headers := map[string][]string{
 		"Authorization": {fmt.Sprintf("Bearer %s", spec.primaryAPIKey())},
 		"User-Agent":    {"agy-identity-bridge-executor"},
@@ -729,18 +729,61 @@ func normalizeExecutorModel(req *executorRequest, spec providerSpec) {
 	if req == nil {
 		return
 	}
-	req.Model = stripModelPrefix(req.Model, settingsModelPrefix(currentPluginSettings(), spec))
+	prefix := settingsModelPrefix(currentPluginSettings(), spec)
+	req.Model = stripModelPrefix(req.Model, prefix)
+	// Image traffic has its own upstream contract. In particular, agy2api may
+	// serve gemini-image through /v1/chat/completions, so the bridge must not
+	// turn an image model into a reasoning-effort chat request.
+	if isImageLaneModel(req.Model, spec) {
+		req.Payload = stripPayloadModelPrefix(req.Payload, prefix)
+		return
+	}
 	var suffixEffort string
 	req.Model, suffixEffort = normalizeThinkingModelName(req.Model)
 	req.Payload = rewritePayloadModelWithEffort(
 		req.Payload,
-		settingsModelPrefix(currentPluginSettings(), spec),
+		prefix,
 		firstNonEmpty(suffixEffort, reasoningEffortFromMetadata(req.Metadata)),
 	)
 }
 
 func rewritePayloadModel(payload []byte, prefix string) []byte {
 	return rewritePayloadModelWithEffort(payload, prefix, "")
+}
+
+func stripPayloadModelPrefix(payload []byte, prefix string) []byte {
+	if len(payload) == 0 || strings.TrimSpace(prefix) == "" {
+		return payload
+	}
+	var body map[string]any
+	if errUnmarshal := json.Unmarshal(payload, &body); errUnmarshal != nil {
+		return payload
+	}
+	model, ok := body["model"].(string)
+	if !ok {
+		return payload
+	}
+	rewritten := stripModelPrefix(model, prefix)
+	if rewritten == model {
+		return payload
+	}
+	body["model"] = rewritten
+	out, errMarshal := json.Marshal(body)
+	if errMarshal != nil {
+		return payload
+	}
+	return out
+}
+
+func isImageLaneModel(model string, spec providerSpec) bool {
+	bare := strings.ToLower(strings.TrimSpace(stripModelPrefix(model, spec.Prefix)))
+	if bare == "" {
+		return false
+	}
+	if strings.Contains(bare, "image") {
+		return true
+	}
+	return spec.servesImageModel(bare)
 }
 
 func rewritePayloadModelWithEffort(payload []byte, prefix, fallbackEffort string) []byte {

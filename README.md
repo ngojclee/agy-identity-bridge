@@ -143,6 +143,9 @@ CPA normalizes a dynamic suffix such as `gemini-3.8-flash(high)` before provider
 lookup and carries the effort in request metadata. The plugin preserves that
 contract by forwarding the base model plus `reasoning_effort=high` to agy2api.
 An explicit effort already present in the request body wins over the suffix.
+Image-lane model names, including `gemini-image`, are forwarded after prefix
+stripping only: the plugin does not add reasoning effort or rewrite an image
+model suffix, so chat requests for `gemini-image` reach agy2api unchanged.
 CPA's public `/v1/models` response currently exposes only basic model fields,
 so effort controls are not discoverable through CPA until CPA itself forwards
 that metadata.
