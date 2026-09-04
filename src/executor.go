@@ -744,10 +744,8 @@ func rewritePayloadModel(payload []byte, prefix string) []byte {
 }
 
 func rewritePayloadModelWithEffort(payload []byte, prefix, fallbackEffort string) []byte {
-	if len(payload) == 0 || strings.TrimSpace(prefix) == "" {
-		if strings.TrimSpace(fallbackEffort) == "" {
-			return payload
-		}
+	if len(payload) == 0 {
+		return payload
 	}
 	var body map[string]any
 	if errUnmarshal := json.Unmarshal(payload, &body); errUnmarshal != nil {
