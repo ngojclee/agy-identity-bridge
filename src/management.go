@@ -790,8 +790,8 @@ function maskPreview(value){ const text = String(value ?? '').trim(); if(!text) 
 function setDrawer(open){ drawerOpen = !!open; document.body.classList.toggle('drawer-open', drawerOpen); document.body.classList.toggle('drawer-closed', !drawerOpen); const label = drawerOpen ? 'Close editor' : 'Open editor'; ['drawer-toggle','drawer-rail-toggle'].forEach(id=>{ const node = el(id); if(node) node.textContent = label; }); }
 function setLocked(node, locked){ if(!node) return; if('disabled' in node){ node.disabled = locked; } node.querySelectorAll('input,select,textarea,button').forEach(child=>{ child.disabled = locked; }); }
 function updateKeySummary(node){ const input = node.querySelector('.api-key-value'); const preview = node.querySelector('.row-secret-preview'); if(!input || !preview) return; const text = input.value.trim(); const existing = node.dataset.existing === 'true'; preview.textContent = text ? maskPreview(text) : (existing ? 'Configured' : 'Empty'); }
-function updateModelSummary(node){ const nameInput = node.querySelector('.model-name'); const aliasInput = node.querySelector('.model-alias'); const imageInput = node.querySelector('.model-image'); const summaryName = node.querySelector('.model-summary-name'); const summarySub = node.querySelector('.model-summary-sub'); const badges = node.querySelector('.row-badges'); const name = nameInput ? nameInput.value.trim() : ''; const alias = aliasInput ? aliasInput.value.trim() : ''; const thinkLevels = Array.from(node.querySelectorAll('.model-think-level')).filter(cb=>cb.checked).map(cb=>cb.dataset.level).filter(level=>level !== 'none'); const none = node.querySelector('.model-think-level[data-level="none"]'); if(summaryName) summaryName.textContent = name || 'New model'; if(summarySub) summarySub.textContent = alias ? 'Alias: ' + alias : 'No alias set'; const chips = []; if(imageInput && imageInput.checked){ chips.push('<span class="row-badge image">Image</span>'); } if(none && none.checked){ chips.push('<span class="row-badge thinking">Thinking off</span>'); } else if(thinkLevels.length){ chips.push('<span class="row-badge thinking">Thinking</span>'); chips.push('<span class="row-badge">' + thinkLevels.length + ' levels</span>'); } if(badges) badges.innerHTML = chips.join(''); }
-function syncThinkControls(node, changed){ if(changed.dataset.level === 'none' && changed.checked){ node.querySelectorAll('.model-think-level').forEach(other=>{ if(other !== changed && other.dataset.level !== 'none'){ other.checked = false; } }); } else if(changed.dataset.level !== 'none' && changed.checked){ const none = node.querySelector('.model-think-level[data-level="none"]'); if(none) none.checked = false; } }
+function updateModelSummary(node){ const nameInput = node.querySelector('.model-name'); const aliasInput = node.querySelector('.model-alias'); const imageInput = node.querySelector('.model-image'); const summaryName = node.querySelector('.model-summary-name'); const summarySub = node.querySelector('.model-summary-sub'); const badges = node.querySelector('.row-badges'); const name = nameInput ? nameInput.value.trim() : ''; const alias = aliasInput ? aliasInput.value.trim() : ''; const thinkLevels = Array.from(node.querySelectorAll('.model-think-level')).filter(cb=>cb.checked).map(cb=>cb.dataset.level); const none = node.querySelector('.model-think-level[data-level="none"]'); if(summaryName) summaryName.textContent = name || 'New model'; if(summarySub) summarySub.textContent = alias ? 'Alias: ' + alias : 'No alias set'; const chips = []; if(imageInput && imageInput.checked){ chips.push('<span class="row-badge image">Image</span>'); } if(none && none.checked){ chips.push('<span class="row-badge thinking">None allowed</span>'); } const activeLevels = thinkLevels.filter(level=>level !== 'none'); if(activeLevels.length){ chips.push('<span class="row-badge thinking">Thinking</span>'); chips.push('<span class="row-badge">' + activeLevels.length + ' levels</span>'); } if(badges) badges.innerHTML = chips.join(''); }
+function syncThinkControls(node, changed){ updateModelSummary(node); }
 function bindKeyRow(node){ const input = node.querySelector('.api-key-value'); const remove = node.querySelector('.row-remove'); const test = node.querySelector('.row-test'); if(input){ input.addEventListener('input', ()=>updateKeySummary(node)); input.addEventListener('change', ()=>updateKeySummary(node)); updateKeySummary(node); } if(remove){ remove.onclick = ev=>{ ev.preventDefault(); ev.stopPropagation(); node.remove(); updateCounts(); }; } if(test){ test.onclick = ev=>{ ev.preventDefault(); ev.stopPropagation(); runProviderTest(Number(node.dataset.keyIndex || 0)); }; } }
 function bindHeaderRow(node){ const remove = node.querySelector('.row-remove'); if(remove){ remove.onclick = ev=>{ ev.preventDefault(); ev.stopPropagation(); node.remove(); updateCounts(); }; } }
 function bindModelRow(node){ const refresh = ()=>updateModelSummary(node); const remove = node.querySelector('.row-remove'); const nameInput = node.querySelector('.model-name'); const aliasInput = node.querySelector('.model-alias'); const imageInput = node.querySelector('.model-image'); if(nameInput){ nameInput.addEventListener('input', refresh); } if(aliasInput){ aliasInput.addEventListener('input', refresh); } if(imageInput){ imageInput.addEventListener('change', refresh); } node.querySelectorAll('.model-think-level').forEach(cb=>{ cb.addEventListener('change', ()=>{ syncThinkControls(node, cb); refresh(); updateCounts(); }); }); if(remove){ remove.onclick = ev=>{ ev.preventDefault(); ev.stopPropagation(); node.remove(); updateCounts(); }; } refresh(); }
@@ -892,16 +892,17 @@ function rowHtml(type, row, index){
 		return '<div class="rowcard header-row" data-row="header"><div class="rowgrid cols-3"><div class="field"><label>Header</label><input class="header-key" placeholder="X-Custom-Header"></div><div class="field"><label>Value</label><input class="header-value" placeholder="value"></div><div class="actions end"><button class="icon-btn row-remove" type="button" aria-label="Remove request header" title="Remove">×</button></div></div></div>';
 	}
 	const levels = ['none','minimal','low','medium','high','xhigh','max','auto'];
-	const labels = {none:'Disable thinking', minimal:'Minimal', low:'Low', medium:'Medium', high:'High', xhigh:'Extra high', max:'Maximum', auto:'Automatic'};
+	const labels = {none:'None', minimal:'Minimal', low:'Low', medium:'Medium', high:'High', xhigh:'Extra high', max:'Maximum', auto:'Automatic'};
 	const think = row && row.thinking_levels && row.thinking_levels.length ? row.thinking_levels : [];
-	const noneChecked = row && row.thinking_disabled || think.length === 0;
+	const noneChecked = !!(row && row.thinking_disabled) || think.includes('none');
 	const imageChecked = !!(row && row.image);
 	const name = row && row.name ? row.name : '';
 	const alias = row && row.alias ? row.alias : '';
 	const chips = [];
 	if(imageChecked){ chips.push('<span class="row-badge image">Image</span>'); }
-	if(noneChecked){ chips.push('<span class="row-badge thinking">Thinking off</span>'); }
-	else if(think.length){ chips.push('<span class="row-badge thinking">Thinking</span>'); chips.push('<span class="row-badge">' + think.length + ' levels</span>'); }
+	if(noneChecked){ chips.push('<span class="row-badge thinking">None allowed</span>'); }
+	const activeLevels = think.filter(level=>level !== 'none');
+	if(activeLevels.length){ chips.push('<span class="row-badge thinking">Thinking</span>'); chips.push('<span class="row-badge">' + activeLevels.length + ' levels</span>'); }
 	let thinkHtml = '<div class="think-grid">';
 	for(const level of levels){
 		const checked = level === 'none' ? noneChecked : think.includes(level);
@@ -958,7 +959,8 @@ function renderModelRows(rows){ renderRows('model-rows', 'model', rows || []); }
 function updateCounts(){ const keys = el('api-key-rows').querySelectorAll('.rowcard'); keys.forEach((node,index)=>{ node.dataset.keyIndex = index.toString(); const title = node.querySelector('.rowcard-title strong'); if(title) title.textContent = 'Key #' + (index + 1); }); el('api-key-count').textContent = keys.length.toString(); el('header-count').textContent = el('header-rows').querySelectorAll('.rowcard').length.toString(); el('model-count').textContent = el('model-rows').querySelectorAll('.rowcard').length.toString(); renderTestModelOptions(collectModels()); }
 function collectKeyRows(){ return Array.from(el('api-key-rows').querySelectorAll('.rowcard')).map(node=>({existing: node.dataset.existing === 'true', value: node.querySelector('.api-key-value').value.trim()})); }
 function collectHeaders(){ return Array.from(el('header-rows').querySelectorAll('.rowcard')).map(node=>({key: node.querySelector('.header-key').value.trim(), value: node.querySelector('.header-value').value.trim()})).filter(item=>item.key && item.value); }
-function collectModels(){ return Array.from(el('model-rows').querySelectorAll('.rowcard')).map(node=>{ const levels = Array.from(node.querySelectorAll('.model-think-level')).filter(cb=>cb.checked).map(cb=>cb.dataset.level).filter(level=>level !== 'none'); const none = node.querySelector('.model-think-level[data-level="none"]'); return {name: node.querySelector('.model-name').value.trim(), alias: node.querySelector('.model-alias').value.trim(), image: node.querySelector('.model-image').checked, thinking_disabled: !!(none && none.checked), thinking_levels: levels}; }).filter(item=>item.name || item.alias); }
+function defaultThinkingLevels(model){ const id = (model || '').trim().toLowerCase(); if(id === 'gemini-3.1-pro') return ['none','low','high']; if(['gemini-3.6-flash','gemini-3.7-flash','gemini-3.8-flash'].includes(id)) return ['none','low','medium','high']; if(id === 'gemini-image') return ['none','low','high']; return []; }
+function collectModels(){ return Array.from(el('model-rows').querySelectorAll('.rowcard')).map(node=>{ const levels = Array.from(node.querySelectorAll('.model-think-level')).filter(cb=>cb.checked).map(cb=>cb.dataset.level); const none = node.querySelector('.model-think-level[data-level="none"]'); return {name: node.querySelector('.model-name').value.trim(), alias: node.querySelector('.model-alias').value.trim(), image: node.querySelector('.model-image').checked, thinking_disabled: !!(none && none.checked) && levels.length === 1, thinking_levels: levels}; }).filter(item=>item.name || item.alias); }
 function payload(){ const keyRows = collectKeyRows(); return {original_name: el('original_name').value, original_prefix: el('original_prefix').value, original_base_url: el('original_base_url').value, name: el('name').value.trim(), prefix: el('prefix').value.trim(), base_url: el('base_url').value.trim(), priority: Number(el('priority').value || 0), disabled: el('disabled').checked, disable_cooling: el('disable_cooling').checked, api_keys: keyRows.filter(row=>!row.existing).map(row=>row.value).filter(Boolean), api_key_rows: keyRows, headers: collectHeaders(), models: collectModels(), enabled: el('enabled').checked, allow_explicit_client_identity_headers: el('allow_explicit_client_identity_headers').checked, principal_fallback_mode: el('principal_fallback_mode').value, debug_logging: el('debug_logging').value === 'true', executor_enabled: el('executor_enabled').value === 'true', executor_provider: el('executor_provider').value.trim(), model_namespace: el('model_namespace').value.trim(), hmac_secret: el('hmac_secret').value, agy2api_identity_secret: el('agy_secret').value, hmac_secret_source: el('hmac_source').value, test_model: el('test-model').value, test_api_key_index: -1}; }
 function appendModelRow(row){ const box = el('model-rows'); const empty = box.querySelector('.muted.small'); if(empty) box.innerHTML = ''; const wrap = document.createElement('div'); wrap.innerHTML = rowHtml('model', row || {}, box.querySelectorAll('.rowcard').length); const node = wrap.firstElementChild; if(!node) return; box.appendChild(node); bindModelRow(node); updateCounts(); }
 function openModelPicker(models){ fetchedModels = (models || []).filter(Boolean).map(String); renderPicker(); el('model-picker').classList.remove('hidden'); }
@@ -991,7 +993,7 @@ function applyPickedModels(){
 		const checkbox = row.querySelector('.picker-model');
 		const model = row.dataset.model || '';
 		if(checkbox && checkbox.checked && !checkbox.disabled && !existing.has(model.toLowerCase())){
-			appendModelRow({name: model, image: model.toLowerCase().includes('image'), thinking_levels: model.toLowerCase().includes('image') ? [] : ['low','medium','high']});
+			appendModelRow({name: model, image: model.toLowerCase().includes('image'), thinking_levels: defaultThinkingLevels(model)});
 			existing.add(model.toLowerCase());
 			added++;
 		}
@@ -1024,7 +1026,7 @@ el('load-secure').onclick = async ()=>{ try{ if(el('mkey').value.trim()) session
 el('clear-key').onclick = ()=>{ sessionStorage.removeItem('agyBridgeManagementKey'); el('mkey').value = ''; notice('Management key cleared from this browser session.', 'warn'); show('Management key cleared from this browser session.'); };
 el('add-key').onclick = ()=>{ if(state.locked){ notice('Load secure config first.', 'warn'); return; } const box = el('api-key-rows'); const empty = box.querySelector(':scope > .muted.small'); if(empty) empty.remove(); const index = box.querySelectorAll('.rowcard').length; box.insertAdjacentHTML('beforeend', rowHtml('key', {existing:false, open:true}, index)); const node = box.querySelector('.rowcard:last-child'); if(node){ bindKeyRow(node); node.open = true; updateCounts(); const input = node.querySelector('.api-key-value'); if(input) input.focus(); } };
 el('add-header').onclick = ()=>{ if(state.locked){ notice('Load secure config first.', 'warn'); return; } const box = el('header-rows'); const empty = box.querySelector(':scope > .muted.small'); if(empty) empty.remove(); box.insertAdjacentHTML('beforeend', rowHtml('header', {}, box.querySelectorAll('.rowcard').length)); const node = box.querySelector('.rowcard:last-child'); if(node){ bindHeaderRow(node); updateCounts(); const input = node.querySelector('.header-key'); if(input) input.focus(); } };
-el('add-model').onclick = ()=>{ if(state.locked){ notice('Load secure config first.', 'warn'); return; } const box = el('model-rows'); const empty = box.querySelector(':scope > .muted.small'); if(empty) empty.remove(); const index = box.querySelectorAll('.rowcard').length; box.insertAdjacentHTML('beforeend', rowHtml('model', {name:'', alias:'', thinking_levels:['low','medium','high'], open:true}, index)); const node = box.querySelector('.rowcard:last-child'); if(node){ bindModelRow(node); node.open = true; updateCounts(); const input = node.querySelector('.model-name'); if(input) input.focus(); } };
+el('add-model').onclick = ()=>{ if(state.locked){ notice('Load secure config first.', 'warn'); return; } const box = el('model-rows'); const empty = box.querySelector(':scope > .muted.small'); if(empty) empty.remove(); const index = box.querySelectorAll('.rowcard').length; box.insertAdjacentHTML('beforeend', rowHtml('model', {name:'', alias:'', thinking_levels:[], open:true}, index)); const node = box.querySelector('.rowcard:last-child'); if(node){ bindModelRow(node); node.open = true; updateCounts(); const input = node.querySelector('.model-name'); if(input) input.focus(); } };
 el('fetch-models').onclick = async ()=>{ if(state.locked){ notice('Load secure config first.', 'warn'); return; } try{ const data = await call('/provider/fetch-models', payload()); if(data.models){ openModelPicker(data.models); notice(data.model_count + ' models fetched. Select which ones to add.', 'ok'); } show(data); }catch(e){ notice('Fetch failed. Check the endpoint and API key.', 'err'); show('Fetch failed: ' + e.message); } };
 el('test-provider').onclick = ()=>runProviderTest();
 el('picker-close').onclick = closeModelPicker;
@@ -1149,12 +1151,13 @@ func handleProviderFetchModels(request pluginapi.ManagementRequest) ([]byte, err
 		return managementJSONResponse(http.StatusBadRequest, map[string]any{"ok": false, "error": errParse.Error()}), nil
 	}
 	spec := editorProviderSpec(payload)
-	status, models, errProbe := probeProviderModels(spec)
+	status, modelSpecs, errProbe := probeProviderModelSpecs(spec)
 	if errProbe != nil {
 		return managementJSONResponse(http.StatusBadGateway, map[string]any{"ok": false, "error": errProbe.Error()}), nil
 	}
-	if status >= 200 && status < 300 && len(models) > 0 {
-		saveModelCache(spec.upstreamBaseURL(), models)
+	models := modelIDsFromSpecs(modelSpecs)
+	if status >= 200 && status < 300 && len(modelSpecs) > 0 {
+		saveModelCatalog(spec.upstreamBaseURL(), modelSpecs)
 	}
 	return managementJSONResponse(http.StatusOK, map[string]any{
 		"ok":          status >= 200 && status < 300,
@@ -1198,7 +1201,7 @@ func parseProviderEditorPayload(raw []byte) (providerEditorPayload, error) {
 	for i := range payload.Models {
 		payload.Models[i].Name = strings.TrimSpace(payload.Models[i].Name)
 		payload.Models[i].Alias = strings.TrimSpace(payload.Models[i].Alias)
-		payload.Models[i].ThinkingLevels = uniqueStrings(payload.Models[i].ThinkingLevels)
+		payload.Models[i].ThinkingLevels = normalizeThinkingLevels(payload.Models[i].ThinkingLevels)
 		payload.Models[i].InputModalities = uniqueStrings(payload.Models[i].InputModalities)
 		payload.Models[i].OutputModalities = uniqueStrings(payload.Models[i].OutputModalities)
 	}
@@ -1294,7 +1297,10 @@ func editorModelsForTest(rows []providerEditorModel) []modelSpec {
 		}
 		var thinking *thinkingSpec
 		if row.ThinkingDisabled || len(row.ThinkingLevels) > 0 {
-			thinking = &thinkingSpec{Levels: append([]string(nil), row.ThinkingLevels...)}
+			thinking = &thinkingSpec{
+				Levels:      normalizeThinkingLevels(row.ThinkingLevels),
+				ZeroAllowed: containsThinkingLevel(row.ThinkingLevels, "none"),
+			}
 		}
 		out = append(out, modelSpec{
 			Name:             name,
@@ -1416,6 +1422,11 @@ func editorModelIsImage(models []modelSpec, model string) bool {
 }
 
 func probeProviderModels(spec providerSpec) (int, []string, error) {
+	status, models, errProbe := probeProviderModelSpecs(spec)
+	return status, modelIDsFromSpecs(models), errProbe
+}
+
+func probeProviderModelSpecs(spec providerSpec) (int, []modelSpec, error) {
 	if spec.upstreamBaseURL() == "" {
 		return 0, nil, fmt.Errorf("base URL is required")
 	}
@@ -1454,27 +1465,121 @@ func probeProviderModels(spec providerSpec) (int, []string, error) {
 	if errDecode := json.Unmarshal(raw, &response); errDecode != nil {
 		return 0, nil, fmt.Errorf("decode host HTTP response: %w", errDecode)
 	}
-	models := parseOpenAIModels(unb64(response.Body))
+	models := parseOpenAIModelSpecs(unb64(response.Body))
 	return response.StatusCode, models, nil
 }
 
 func parseOpenAIModels(raw []byte) []string {
+	return modelIDsFromSpecs(parseOpenAIModelSpecs(raw))
+}
+
+func parseOpenAIModelSpecs(raw []byte) []modelSpec {
 	var decoded struct {
 		Data []struct {
-			ID string `json:"id"`
+			ID                       string          `json:"id"`
+			Type                     string          `json:"type"`
+			SupportedReasoningEffort []string        `json:"supported_reasoning_efforts"`
+			ReasoningEffort          string          `json:"reasoning_effort"`
+			Capabilities             json.RawMessage `json:"capabilities"`
+			InputModalities          []string        `json:"supported_input_modalities"`
+			OutputModalities         []string        `json:"supported_output_modalities"`
 		} `json:"data"`
 	}
 	if errUnmarshal := json.Unmarshal(raw, &decoded); errUnmarshal != nil {
 		return nil
 	}
-	models := make([]string, 0, len(decoded.Data))
+	models := make([]modelSpec, 0, len(decoded.Data))
 	for _, item := range decoded.Data {
-		if id := strings.TrimSpace(item.ID); id != "" {
-			models = append(models, id)
+		id := strings.TrimSpace(item.ID)
+		if id == "" {
+			continue
+		}
+		levels := normalizeThinkingLevels(item.SupportedReasoningEffort)
+		if len(levels) == 0 && strings.TrimSpace(item.ReasoningEffort) != "" {
+			levels = normalizeThinkingLevels([]string{item.ReasoningEffort})
+		}
+		if len(levels) == 0 {
+			levels = defaultThinkingLevelsForModel(id)
+		}
+		var thinking *thinkingSpec
+		if len(levels) > 0 {
+			thinking = &thinkingSpec{Levels: levels}
+		}
+		lowerType := strings.ToLower(strings.TrimSpace(item.Type))
+		image := strings.Contains(strings.ToLower(id), "image") ||
+			strings.Contains(lowerType, "image")
+		for _, capability := range jsonStringList(item.Capabilities) {
+			if strings.Contains(strings.ToLower(capability), "image") {
+				image = true
+			}
+		}
+		models = append(models, modelSpec{
+			Name:             id,
+			Image:            image,
+			Thinking:         thinking,
+			InputModalities:  normalizeModalities(item.InputModalities),
+			OutputModalities: normalizeModalities(item.OutputModalities),
+		})
+	}
+	sort.SliceStable(models, func(i, j int) bool {
+		return strings.ToLower(models[i].Name) < strings.ToLower(models[j].Name)
+	})
+	return uniqueModelSpecs(models)
+}
+
+func jsonStringList(raw json.RawMessage) []string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var list []string
+	if errUnmarshal := json.Unmarshal(raw, &list); errUnmarshal == nil {
+		return list
+	}
+	var object map[string]any
+	if errUnmarshal := json.Unmarshal(raw, &object); errUnmarshal != nil {
+		return nil
+	}
+	out := make([]string, 0, len(object))
+	for key, value := range object {
+		if enabled, ok := value.(bool); ok && !enabled {
+			continue
+		}
+		if strings.TrimSpace(key) != "" {
+			out = append(out, key)
 		}
 	}
-	sortStrings(models)
-	return uniqueStrings(models)
+	return out
+}
+
+func modelIDsFromSpecs(models []modelSpec) []string {
+	ids := make([]string, 0, len(models))
+	for _, model := range models {
+		if id := strings.TrimSpace(model.Name); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	sortStrings(ids)
+	return uniqueStrings(ids)
+}
+
+func uniqueModelSpecs(models []modelSpec) []modelSpec {
+	seen := make(map[string]struct{}, len(models))
+	out := make([]modelSpec, 0, len(models))
+	for _, model := range models {
+		key := strings.ToLower(strings.TrimSpace(model.Name))
+		if key == "" {
+			key = strings.ToLower(strings.TrimSpace(model.Alias))
+		}
+		if key == "" {
+			continue
+		}
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, model)
+	}
+	return out
 }
 
 func patchProviderConfig(raw []byte, payload providerEditorPayload, settings PluginSettings) ([]byte, []string, error) {
@@ -1667,7 +1772,7 @@ func thinkingLevels(spec *thinkingSpec) []string {
 	if spec == nil {
 		return nil
 	}
-	return append([]string(nil), spec.Levels...)
+	return effectiveThinking(spec).Levels
 }
 
 func modelsForEditorPayload(rows []providerEditorModel, existing []modelSpec) []any {
@@ -1700,7 +1805,8 @@ func modelsForEditorPayload(rows []providerEditorModel, existing []modelSpec) []
 			}
 			if len(row.ThinkingLevels) > 0 || row.ThinkingDisabled {
 				item["thinking"] = map[string]any{
-					"levels": row.ThinkingLevels,
+					"levels":       row.ThinkingLevels,
+					"zero-allowed": containsThinkingLevel(row.ThinkingLevels, "none"),
 				}
 			}
 			if len(row.InputModalities) > 0 {
@@ -1738,7 +1844,8 @@ func modelsForEditorPayload(rows []providerEditorModel, existing []modelSpec) []
 		}
 		if len(row.ThinkingLevels) > 0 || row.ThinkingDisabled {
 			item["thinking"] = map[string]any{
-				"levels": row.ThinkingLevels,
+				"levels":       row.ThinkingLevels,
+				"zero-allowed": containsThinkingLevel(row.ThinkingLevels, "none"),
 			}
 		} else if model.Thinking != nil {
 			item["thinking"] = map[string]any{

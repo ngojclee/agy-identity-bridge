@@ -123,8 +123,8 @@ func TestModelInfosMatchCPAMapping(t *testing.T) {
 	if chat.Type != "openai-compatibility" {
 		t.Fatalf("chat type = %q", chat.Type)
 	}
-	if chat.Thinking == nil || len(chat.Thinking.Levels) != 3 {
-		t.Fatalf("chat thinking default = %+v", chat.Thinking)
+	if chat.Thinking != nil {
+		t.Fatalf("unannotated chat thinking should remain absent: %+v", chat.Thinking)
 	}
 	if chat.OwnedBy != "Antigravity" || chat.Object != "model" || chat.DisplayName != "gemini-pro" {
 		t.Fatalf("chat metadata = %+v", chat)
@@ -145,6 +145,28 @@ func TestModelInfosMatchCPAMapping(t *testing.T) {
 
 	if _, ok := byID["no-alias-model"]; !ok {
 		t.Fatalf("model without alias should publish by name: %+v", infos)
+	}
+}
+
+func TestFamilyThinkingDefaultsAreExplicitAndNoneIsARealLevel(t *testing.T) {
+	for _, test := range []struct {
+		model string
+		want  string
+	}{
+		{"gemini-3.1-pro", "none,low,high"},
+		{"gemini-3.8-flash", "none,low,medium,high"},
+		{"gemini-image", "none,low,high"},
+	} {
+		got := strings.Join(defaultThinkingLevelsForModel(test.model), ",")
+		if got != test.want {
+			t.Fatalf("%s levels = %q, want %q", test.model, got, test.want)
+		}
+	}
+	if got := defaultThinkingLevelsForModel("gemini-3.8-flash-high"); len(got) != 0 {
+		t.Fatalf("concrete suffixed model received inferred family levels: %+v", got)
+	}
+	if got := defaultThinkingLevelsForModel("model-without-reasoning"); len(got) != 0 {
+		t.Fatalf("unknown model received inferred levels: %+v", got)
 	}
 }
 

@@ -730,31 +730,109 @@ func normalizeExecutorModel(req *executorRequest, spec providerSpec) {
 		return
 	}
 	req.Model = stripModelPrefix(req.Model, settingsModelPrefix(currentPluginSettings(), spec))
-	req.Payload = rewritePayloadModel(req.Payload, settingsModelPrefix(currentPluginSettings(), spec))
+	var suffixEffort string
+	req.Model, suffixEffort = normalizeThinkingModelName(req.Model)
+	req.Payload = rewritePayloadModelWithEffort(
+		req.Payload,
+		settingsModelPrefix(currentPluginSettings(), spec),
+		firstNonEmpty(suffixEffort, reasoningEffortFromMetadata(req.Metadata)),
+	)
 }
 
 func rewritePayloadModel(payload []byte, prefix string) []byte {
+	return rewritePayloadModelWithEffort(payload, prefix, "")
+}
+
+func rewritePayloadModelWithEffort(payload []byte, prefix, fallbackEffort string) []byte {
 	if len(payload) == 0 || strings.TrimSpace(prefix) == "" {
-		return payload
+		if strings.TrimSpace(fallbackEffort) == "" {
+			return payload
+		}
 	}
 	var body map[string]any
 	if errUnmarshal := json.Unmarshal(payload, &body); errUnmarshal != nil {
 		return payload
 	}
-	model, ok := body["model"].(string)
-	if !ok {
+	changed := false
+	if model, ok := body["model"].(string); ok {
+		rewritten := stripModelPrefix(model, prefix)
+		rewritten, suffixEffort := normalizeThinkingModelName(rewritten)
+		if rewritten != model {
+			body["model"] = rewritten
+			changed = true
+		}
+		if strings.TrimSpace(fallbackEffort) == "" {
+			fallbackEffort = suffixEffort
+		}
+	}
+	if strings.TrimSpace(fallbackEffort) != "" && !payloadHasReasoningEffort(body) {
+		body["reasoning_effort"] = strings.ToLower(strings.TrimSpace(fallbackEffort))
+		changed = true
+	}
+	if !changed {
 		return payload
 	}
-	rewritten := stripModelPrefix(model, prefix)
-	if rewritten == model {
-		return payload
-	}
-	body["model"] = rewritten
 	out, errMarshal := json.Marshal(body)
 	if errMarshal != nil {
 		return payload
 	}
 	return out
+}
+
+func normalizeThinkingModelName(model string) (string, string) {
+	model = strings.TrimSpace(model)
+	open := strings.LastIndex(model, "(")
+	if open < 0 || !strings.HasSuffix(model, ")") || open == len(model)-1 {
+		return model, ""
+	}
+	level := strings.ToLower(strings.TrimSpace(model[open+1 : len(model)-1]))
+	switch level {
+	case "none", "off", "minimal", "low", "medium", "high", "xhigh", "max", "auto":
+		if level == "off" {
+			level = "none"
+		}
+		return strings.TrimSpace(model[:open]), level
+	default:
+		return model, ""
+	}
+}
+
+func payloadHasReasoningEffort(body map[string]any) bool {
+	if body == nil {
+		return false
+	}
+	for _, key := range []string{"reasoning_effort", "effort"} {
+		if value, ok := body[key]; ok && strings.TrimSpace(fmt.Sprint(value)) != "" {
+			return true
+		}
+	}
+	if value, ok := body["thinking"]; ok {
+		if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
+			return true
+		}
+	}
+	if nested, ok := body["reasoning"].(map[string]any); ok {
+		if value, exists := nested["effort"]; exists && strings.TrimSpace(fmt.Sprint(value)) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func reasoningEffortFromMetadata(metadata map[string]any) string {
+	if metadata == nil {
+		return ""
+	}
+	for _, key := range []string{"reasoning_effort", "reasoning.effort", "effort", "thinking"} {
+		value, ok := metadata[key]
+		if !ok {
+			continue
+		}
+		if text, ok := value.(string); ok && strings.TrimSpace(text) != "" {
+			return strings.ToLower(strings.TrimSpace(text))
+		}
+	}
+	return ""
 }
 
 func forceStreamingPayload(payload []byte) []byte {

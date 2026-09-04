@@ -203,6 +203,60 @@ func TestExecutorStripsPublishedPrefixBeforeCallingAgy2api(t *testing.T) {
 	}
 }
 
+func TestExecutorConvertsThinkingSuffixIntoReasoningEffort(t *testing.T) {
+	loadMirror(t)
+	root, errParse := parseYAMLMap([]byte(mirrorConfigYAML))
+	if errParse != nil {
+		t.Fatal(errParse)
+	}
+	spec, found := extractProviderSpec(root, currentPluginSettings())
+	if !found {
+		t.Fatal("no mirrored provider")
+	}
+	req := executorRequest{
+		Model:   "agy/gemini-3.8-flash(high)",
+		Payload: []byte(`{"model":"agy/gemini-3.8-flash(high)","messages":[]}`),
+		Metadata: map[string]any{
+			"reasoning_effort": "low",
+		},
+	}
+	normalizeExecutorModel(&req, spec)
+	if req.Model != "gemini-3.8-flash" {
+		t.Fatalf("normalized model = %q, want family model", req.Model)
+	}
+	var body map[string]any
+	if errJSON := json.Unmarshal(req.Payload, &body); errJSON != nil {
+		t.Fatal(errJSON)
+	}
+	if body["model"] != "gemini-3.8-flash" {
+		t.Fatalf("payload model = %#v", body["model"])
+	}
+	if body["reasoning_effort"] != "high" {
+		t.Fatalf("suffix effort was not preserved: %#v", body["reasoning_effort"])
+	}
+}
+
+func TestExecutorPayloadEffortWinsOverModelSuffix(t *testing.T) {
+	loadMirror(t)
+	root, _ := parseYAMLMap([]byte(mirrorConfigYAML))
+	spec, found := extractProviderSpec(root, currentPluginSettings())
+	if !found {
+		t.Fatal("no mirrored provider")
+	}
+	req := executorRequest{
+		Model:   "gemini-3.8-flash(high)",
+		Payload: []byte(`{"model":"gemini-3.8-flash(high)","reasoning_effort":"low"}`),
+	}
+	normalizeExecutorModel(&req, spec)
+	var body map[string]any
+	if errJSON := json.Unmarshal(req.Payload, &body); errJSON != nil {
+		t.Fatal(errJSON)
+	}
+	if body["reasoning_effort"] != "low" {
+		t.Fatalf("explicit payload effort was overwritten: %#v", body["reasoning_effort"])
+	}
+}
+
 func TestForceStreamingPayload(t *testing.T) {
 	input := []byte(`{"model":"gemini-3.7-flash-high","messages":[]}`)
 	output := forceStreamingPayload(input)

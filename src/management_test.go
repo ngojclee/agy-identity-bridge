@@ -236,6 +236,38 @@ func TestParseOpenAIModelsSortsAndDeduplicatesIDs(t *testing.T) {
 	}
 }
 
+func TestParseOpenAIModelSpecsPreservesEffortMetadata(t *testing.T) {
+	raw := []byte(`{"data":[
+		{"id":"gemini-3.8-flash","supported_reasoning_efforts":["none","low","medium","high"]},
+		{"id":"gemini-image","type":"openai-image","supported_reasoning_efforts":["none","low","high"],"capabilities":{"image_generation":true}},
+		{"id":"plain-model"},
+		{"id":"reasoning-model","reasoning_effort":"high"}
+	]}`)
+	specs := parseOpenAIModelSpecs(raw)
+	if len(specs) != 4 {
+		t.Fatalf("spec count = %d, want 4", len(specs))
+	}
+	byID := make(map[string]modelSpec, len(specs))
+	for _, spec := range specs {
+		byID[spec.Name] = spec
+	}
+	if got := strings.Join(byID["gemini-3.8-flash"].Thinking.Levels, ","); got != "none,low,medium,high" {
+		t.Fatalf("flash levels = %q", got)
+	}
+	if got := strings.Join(byID["gemini-image"].Thinking.Levels, ","); got != "none,low,high" {
+		t.Fatalf("image levels = %q", got)
+	}
+	if byID["plain-model"].Thinking != nil {
+		t.Fatalf("plain model unexpectedly received thinking metadata: %+v", byID["plain-model"].Thinking)
+	}
+	if !byID["gemini-image"].Image {
+		t.Fatal("object capabilities did not mark image model")
+	}
+	if got := strings.Join(byID["reasoning-model"].Thinking.Levels, ","); got != "high" {
+		t.Fatalf("single reasoning_effort = %q", got)
+	}
+}
+
 func TestEditorTestModelStripsProviderPrefixBeforeUpstream(t *testing.T) {
 	settings := decodePluginSettings([]byte(mirrorConfigYAML))
 	spec := providerSpec{

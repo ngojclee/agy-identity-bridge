@@ -111,10 +111,15 @@ plugins:
 
 The plugin mirrors the provider it matches in `openai-compatibility`: base URL,
 API keys, extra headers, priority, disable-cooling, prefix and the model list.
-Model metadata is mapped the same way the host does it, so alias wins over name,
-`image: true` becomes the `openai-image` type, and a chat model without explicit
-thinking still advertises `low`, `medium` and `high`. Nothing is invented: if the
-provider declares no models, the plugin publishes none.
+Model metadata is mapped the same way the host does it, so alias wins over name
+and `image: true` becomes the `openai-image` type. The bridge preserves
+`supported_reasoning_efforts` from the upstream catalog, including `none` as a
+real selectable level. It only supplies the contract-defined levels for the
+exact family aliases `gemini-3.1-pro`, `gemini-3.6-flash`, `gemini-3.7-flash`,
+`gemini-3.8-flash`, and `gemini-image`; concrete suffixed IDs and unknown
+models remain unannotated unless the provider declares metadata. Nothing is
+silently substituted: if the provider declares no models, the plugin publishes
+none.
 
 With `model_namespace: ""`, the mirrored models keep the original provider
 prefix. For example, an original `prefix: agy` publishes
@@ -130,7 +135,17 @@ starts honoring it, the plugin provider wins instead of splitting traffic.
 The plugin returns model names without a provider prefix during model
 registration. CPA applies the prefix from the plugin-owned auth record, so the
 visible client model remains `agy/<model>` (or the configured namespace)
-without becoming `agy/agy/<model>`.
+without becoming `agy/agy/<model>`. A family alias is routable only after it is
+present in the mirrored provider model list or the plugin's fetched model cache;
+agy2api advertising it alone cannot satisfy CPA's pre-executor model lookup.
+
+CPA normalizes a dynamic suffix such as `gemini-3.8-flash(high)` before provider
+lookup and carries the effort in request metadata. The plugin preserves that
+contract by forwarding the base model plus `reasoning_effort=high` to agy2api.
+An explicit effort already present in the request body wins over the suffix.
+CPA's public `/v1/models` response currently exposes only basic model fields,
+so effort controls are not discoverable through CPA until CPA itself forwards
+that metadata.
 
 CPA calls both interceptor phases. The plugin handles `request.intercept_before`
 as an intentional no-op because provider identity and the selected client

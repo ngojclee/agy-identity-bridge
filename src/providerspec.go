@@ -244,25 +244,11 @@ func extractProviderSpec(root map[string]any, settings PluginSettings) (provider
 // cachedModelSpecs converts cached model IDs into editable model specs so the
 // provider editor and executor keep serving the same list.
 func cachedModelSpecs(baseURL string) []modelSpec {
-	ids := loadModelCache()
-	if len(ids) == 0 {
+	catalog := loadModelCatalog()
+	if len(catalog) == 0 {
 		return nil
 	}
-	out := make([]modelSpec, 0, len(ids))
-	for _, id := range ids {
-		image := strings.Contains(strings.ToLower(id), "image")
-		out = append(out, modelSpec{
-			Name:  id,
-			Image: image,
-			Thinking: func() *thinkingSpec {
-				if image {
-					return nil
-				}
-				return &thinkingSpec{Levels: []string{"low", "medium", "high"}}
-			}(),
-		})
-	}
-	return out
+	return catalog
 }
 
 // cachedProviderSpecFromCache restores a serviceable spec purely from the
@@ -297,9 +283,9 @@ func canServeModels(settings PluginSettings, spec providerSpec) bool {
 }
 
 // modelInfos reproduces CLIProxyAPI's own model metadata mapping: alias wins
-// over name, image models switch type, and a chat model without explicit
-// thinking still advertises the three standard levels. These are the bare
-// provider model IDs used for editing and upstream requests.
+// over name and image models switch type. Thinking metadata is passed through
+// exactly as declared by the provider or endpoint catalog; the bridge must not
+// invent effort levels for an otherwise unannotated model.
 func (s providerSpec) modelInfos(namespace string) []modelInfo {
 	created := time.Now().Unix()
 	out := make([]modelInfo, 0, len(s.Models))
@@ -316,10 +302,6 @@ func (s providerSpec) modelInfos(namespace string) []modelInfo {
 		if model.Image {
 			modelType = "openai-image"
 		}
-		thinking := model.Thinking
-		if thinking == nil && !model.Image {
-			thinking = &thinkingSpec{Levels: []string{"low", "medium", "high"}}
-		}
 		out = append(out, modelInfo{
 			ID:                        modelID,
 			Object:                    "model",
@@ -329,11 +311,48 @@ func (s providerSpec) modelInfos(namespace string) []modelInfo {
 			DisplayName:               modelID,
 			SupportedInputModalities:  normalizeModalities(model.InputModalities),
 			SupportedOutputModalities: normalizeModalities(model.OutputModalities),
-			Thinking:                  thinking,
+			Thinking:                  effectiveThinking(model.Thinking),
 		})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
+}
+
+func effectiveThinking(spec *thinkingSpec) *thinkingSpec {
+	if spec == nil {
+		return nil
+	}
+	out := *spec
+	out.Levels = normalizeThinkingLevels(spec.Levels)
+	if spec.ZeroAllowed && !containsThinkingLevel(out.Levels, "none") {
+		out.Levels = append([]string{"none"}, out.Levels...)
+	}
+	return &out
+}
+
+func containsThinkingLevel(levels []string, want string) bool {
+	for _, level := range levels {
+		if strings.EqualFold(strings.TrimSpace(level), want) {
+			return true
+		}
+	}
+	return false
+}
+
+// defaultThinkingLevelsForModel is intentionally narrow. These are the
+// family aliases owned by the agy2api contract; concrete suffixed model IDs
+// and unknown models must keep their source metadata unchanged.
+func defaultThinkingLevelsForModel(model string) []string {
+	switch strings.ToLower(strings.TrimSpace(model)) {
+	case "gemini-3.1-pro":
+		return []string{"none", "low", "high"}
+	case "gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash":
+		return []string{"none", "low", "medium", "high"}
+	case "gemini-image":
+		return []string{"none", "low", "high"}
+	default:
+		return nil
+	}
 }
 
 // modelInfosForRegistration returns bare model IDs for CPA's plugin host.
