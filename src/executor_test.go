@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -147,12 +148,17 @@ func TestBuildUpstreamRequestAttachesIdentityHeaders(t *testing.T) {
 	if upstream.Headers["X-AGY-CPA-Provider-Name"][0] != spec.Name {
 		t.Fatalf("provider name missing: %+v", upstream.Headers)
 	}
+	// Derived from the URL actually requested, so this cannot drift again.
+	wireURL, errWire := url.Parse(upstream.URL)
+	if errWire != nil {
+		t.Fatal(errWire)
+	}
 	expectedSig := computeHMAC(identitySignatureMessage(clientIdentityContext{
 		Principal:    identity.Principal,
 		ClientApp:    identity.ClientApp,
 		Timestamp:    upstream.Headers["X-AGY-Timestamp"][0],
 		ProviderName: spec.Name,
-	}, "POST", "/chat/completions"), hmacSecretForCandidate(currentPluginSettings(), providerCandidate{APIKey: spec.primaryAPIKey()}))
+	}, "POST", wireURL.Path), hmacSecretForCandidate(currentPluginSettings(), providerCandidate{APIKey: spec.primaryAPIKey()}))
 	if upstream.Headers["X-AGY-Signature"][0] != expectedSig {
 		t.Fatalf("signature = %q, want %q", upstream.Headers["X-AGY-Signature"][0], expectedSig)
 	}

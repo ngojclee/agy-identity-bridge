@@ -461,7 +461,9 @@ openai-compatibility:
 		"capability_profile=" + "",
 		"connector_id=" + "",
 		"method=POST",
-		"path=/chat/completions",
+		// The wire path, not the allowlisted endpoint: base_url contributes /v1 and
+		// agy2api verifies against request.url.path.
+		"path=/v1/chat/completions",
 	}, "\n")
 	mac := hmac.New(sha256.New, []byte("intercept-signing-secret-0123456789"))
 	mac.Write([]byte(message))

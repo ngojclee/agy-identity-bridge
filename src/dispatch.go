@@ -408,7 +408,7 @@ func handleInterceptAfter(request []byte) ([]byte, error) {
 		// signature enforcement is on and the executor is not serving it.
 		spec, _ := resolveProviderSpec()
 		headers["X-AGY-Signature"] = []string{computeHMAC(identitySignatureMessage(identity, "POST",
-			upstreamEndpoint(payload.Model, payload.ToFormat, "", requestPathFromMetadata(payload.Metadata), spec)), secret)}
+			signedUpstreamPath(payload.Model, payload.ToFormat, "", requestPathFromMetadata(payload.Metadata), spec)), secret)}
 	}
 	return okEnvelope(InterceptResponsePayload{Headers: headers}), nil
 }

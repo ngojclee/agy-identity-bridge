@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 	"sync"
 
@@ -564,16 +565,46 @@ func buildUpstreamRequest(req executorRequest, spec providerSpec, identity clien
 	} else {
 		headers["Content-Type"] = []string{"application/json"}
 	}
-	for key, values := range identityHeaders(identity, spec, req, "POST", endpoint) {
+	// The signature must cover the path that goes on the wire, not the
+	// allowlisted endpoint. base_url already carries the /v1 prefix, so the
+	// two differ, and agy2api verifies against request.url.path.
+	requestURL, signedPath := upstreamRequestURL(spec.upstreamBaseURL(), endpoint)
+	for key, values := range identityHeaders(identity, spec, req, "POST", signedPath) {
 		headers[key] = values
 	}
 	return hostHTTPRequest{
 		HostCallbackID: req.HostCallbackID,
 		Method:         "POST",
-		URL:            spec.upstreamBaseURL() + endpoint,
+		URL:            requestURL,
 		Headers:        headers,
 		Body:           b64(payload),
 	}, nil
+}
+
+// upstreamRequestURL joins the mirrored provider's base URL with a routed
+// endpoint and returns the full URL plus the path component that will actually
+// appear on the wire. Signing the routed endpoint instead of this path produces
+// a canonical payload that can never verify, because the base URL contributes a
+// prefix the verifier sees and the signer did not.
+func upstreamRequestURL(baseURL, endpoint string) (string, string) {
+	full := strings.TrimSpace(baseURL) + endpoint
+	parsed, errParse := url.Parse(full)
+	if errParse != nil {
+		return full, endpoint
+	}
+	path := strings.TrimSpace(parsed.Path)
+	if path == "" {
+		return full, endpoint
+	}
+	return full, path
+}
+
+// signedUpstreamPath resolves the route for a request and returns the wire path
+// for it, so the executor and the request interceptor always sign identically.
+func signedUpstreamPath(model, format, alt, requestPath string, spec providerSpec) string {
+	endpoint := upstreamEndpoint(model, format, alt, requestPath, spec)
+	_, signedPath := upstreamRequestURL(spec.upstreamBaseURL(), endpoint)
+	return signedPath
 }
 
 func settingsModelPrefix(settings PluginSettings, spec providerSpec) string {
