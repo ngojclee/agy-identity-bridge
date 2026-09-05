@@ -477,11 +477,16 @@ func okEnvelope(v any) []byte {
 }
 
 func errorEnvelope(code, message string) []byte {
+	return errorEnvelopeStatus(code, message, 0)
+}
+
+func errorEnvelopeStatus(code, message string, status int) []byte {
 	raw, errMarshal := json.Marshal(pluginabi.Envelope{
 		OK: false,
 		Error: &pluginabi.Error{
-			Code:    code,
-			Message: message,
+			Code:       code,
+			Message:    message,
+			HTTPStatus: status,
 		},
 	})
 	if errMarshal != nil {

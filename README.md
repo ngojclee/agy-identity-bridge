@@ -156,6 +156,12 @@ through `host.stream.emit` in a goroutine. CPA's RPC adapter cannot expose the
 bridge channel to the HTTP response writer until the executor call returns, so
 returning late turns progressive emit into full-response batching.
 
+If the upstream stream starts with a non-2xx status, the plugin does not treat
+the response as SSE. It drains a bounded body, closes the host HTTP stream once,
+and returns an `upstream_error` envelope with CPA's supported `http_status`
+field. This preserves concrete upstream failures such as agy2api HTTP 413
+instead of letting CPA report a misleading `empty_stream`.
+
 CPA calls both interceptor phases. The plugin handles `request.intercept_before`
 as an intentional no-op because provider identity and the selected client
 credential are only available in the after-auth phase, where the identity

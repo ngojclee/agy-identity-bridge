@@ -927,10 +927,9 @@ func handleExecutorExecute(raw []byte) ([]byte, error) {
 	}
 	recordExecutorUpstreamStatus(response.StatusCode)
 	recordUsageFromExecutorResponse(unb64(response.Body), response.Headers, spec.Name, visibleModel, identity.ClientApp, identity.Principal, "execute")
-	if response.StatusCode < 200 || response.StatusCode > 299 {
+	if response.StatusCode > 0 && (response.StatusCode < 200 || response.StatusCode > 299) {
 		// surfaced verbatim so agy2api's own error detail reaches the client
-		return errorEnvelope("upstream_error", fmt.Sprintf(
-			"agy2api returned HTTP %d: %s", response.StatusCode, string(unb64(response.Body)))), nil
+		return executorUpstreamError(response.StatusCode, unb64(response.Body)), nil
 	}
 	return okEnvelope(executorEnvelope{
 		Payload: b64(unb64(response.Body)),
@@ -970,6 +969,15 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 	if start.StreamID == "" {
 		return errorEnvelope("upstream_stream_unavailable", "host returned no stream id"), nil
 	}
+	recordExecutorUpstreamStatus(start.StatusCode)
+	// A non-2xx stream start is not an SSE stream. agy2api can answer a chat
+	// request with a plain JSON error such as HTTP 413 before any SSE event is
+	// produced. Feeding that body to the SSE parser would emit no frames and
+	// CPA would surface a misleading empty_stream error.
+	if isNonSuccessStreamStart(start.StatusCode) {
+		body := drainHostHTTPStreamBody(start.StreamID, maxUpstreamErrorBodyBytes)
+		return executorUpstreamError(start.StatusCode, body), nil
+	}
 
 	// CPA's RPC adapter cannot hand the downstream stream channel to the HTTP
 	// response writer until executor.execute_stream returns. When the host
@@ -985,6 +993,83 @@ func handleExecutorExecuteStream(raw []byte) ([]byte, error) {
 
 func executorStreamShouldReturnEarly(req executorRequest) bool {
 	return strings.TrimSpace(req.StreamID) != ""
+}
+
+const maxUpstreamErrorBodyBytes = 8192
+
+func isNonSuccessStreamStart(status int) bool {
+	return status > 0 && (status < 200 || status > 299)
+}
+
+func executorUpstreamError(status int, body []byte) []byte {
+	detail := truncateUpstreamErrorBody(body, maxUpstreamErrorBodyBytes)
+	message := fmt.Sprintf("agy2api returned HTTP %d", status)
+	if detail != "" {
+		message += ": " + detail
+	}
+	return errorEnvelopeStatus("upstream_error", message, status)
+}
+
+func truncateUpstreamErrorBody(body []byte, limit int) string {
+	if limit <= 0 || len(body) <= limit {
+		return strings.TrimSpace(string(body))
+	}
+	return strings.TrimSpace(string(body[:limit])) + "... (truncated)"
+}
+
+func drainHostHTTPStreamBody(streamID string, limit int) []byte {
+	return drainHostHTTPStreamBodyWithReader(
+		func() (hostHTTPStreamRead, error) {
+			var read hostHTTPStreamRead
+			raw, errCall := hostCall(pluginabi.MethodHostHTTPStreamRead, []byte(fmt.Sprintf(`{"stream_id":%q}`, streamID)))
+			if errCall != nil {
+				return read, errCall
+			}
+			if errDecode := json.Unmarshal(raw, &read); errDecode != nil {
+				return read, errDecode
+			}
+			return read, nil
+		},
+		func() {
+			_, _ = hostCall(pluginabi.MethodHostHTTPStreamClose, []byte(fmt.Sprintf(`{"stream_id":%q}`, streamID)))
+		},
+		limit,
+	)
+}
+
+func drainHostHTTPStreamBodyWithReader(read func() (hostHTTPStreamRead, error), closeStream func(), limit int) []byte {
+	var out []byte
+	var closeOnce sync.Once
+	defer closeOnce.Do(func() {
+		if closeStream != nil {
+			closeStream()
+		}
+	})
+	if read == nil {
+		return out
+	}
+	for {
+		chunk, errRead := read()
+		if errRead != nil || chunk.Error != "" {
+			break
+		}
+		payload := unb64(chunk.Payload)
+		if len(payload) > 0 {
+			remaining := limit - len(out)
+			if remaining <= 0 {
+				break
+			}
+			if len(payload) > remaining {
+				out = append(out, payload[:remaining]...)
+				break
+			}
+			out = append(out, payload...)
+		}
+		if chunk.Done {
+			break
+		}
+	}
+	return out
 }
 
 func executorStreamBatched(start hostHTTPStreamStart, spec providerSpec, identity clientIdentity, visibleModel string) ([]byte, error) {

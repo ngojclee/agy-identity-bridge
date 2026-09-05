@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -119,6 +120,87 @@ func TestParseExecutorRequestAcceptsStreamIDShapes(t *testing.T) {
 		if got := executorStreamShouldReturnEarly(req); got != (tc.want != "") {
 			t.Fatalf("%s early return = %v, want %v", tc.name, got, tc.want != "")
 		}
+	}
+}
+
+func TestExecutorUpstreamErrorPreservesStatusAndBoundedDetail(t *testing.T) {
+	raw := executorUpstreamError(413, []byte(`{"detail":"Prompt exceeds 300000 characters"}`))
+	var env struct {
+		OK    bool `json:"ok"`
+		Error struct {
+			Code       string `json:"code"`
+			Message    string `json:"message"`
+			HTTPStatus int    `json:"http_status"`
+		} `json:"error"`
+	}
+	if errUnmarshal := json.Unmarshal(raw, &env); errUnmarshal != nil {
+		t.Fatal(errUnmarshal)
+	}
+	if env.OK || env.Error.Code != "upstream_error" || env.Error.HTTPStatus != 413 {
+		t.Fatalf("envelope = %s", raw)
+	}
+	if !strings.Contains(env.Error.Message, "agy2api returned HTTP 413") || !strings.Contains(env.Error.Message, "Prompt exceeds") {
+		t.Fatalf("message = %q", env.Error.Message)
+	}
+}
+
+func TestTruncateUpstreamErrorBodyBoundsBody(t *testing.T) {
+	body := []byte(strings.Repeat("x", 100))
+	got := truncateUpstreamErrorBody(body, 10)
+	if !strings.HasPrefix(got, "xxxxxxxxxx") || !strings.Contains(got, "truncated") {
+		t.Fatalf("truncated body = %q", got)
+	}
+	if len(got) > 40 {
+		t.Fatalf("bounded body too long: %d", len(got))
+	}
+}
+
+func TestDrainHostHTTPStreamBodyWithReaderBoundsAndClosesOnce(t *testing.T) {
+	chunks := []hostHTTPStreamRead{
+		{Payload: b64([]byte("hello "))},
+		{Payload: b64([]byte("world extra"))},
+	}
+	var index int
+	var closes int
+	got := drainHostHTTPStreamBodyWithReader(func() (hostHTTPStreamRead, error) {
+		if index >= len(chunks) {
+			return hostHTTPStreamRead{Done: true}, nil
+		}
+		chunk := chunks[index]
+		index++
+		return chunk, nil
+	}, func() {
+		closes++
+	}, 10)
+	if string(got) != "hello worl" {
+		t.Fatalf("body = %q, want bounded hello worl", got)
+	}
+	if closes != 1 {
+		t.Fatalf("close calls = %d, want 1", closes)
+	}
+}
+
+func TestDrainHostHTTPStreamBodyWithReaderClosesOnReadError(t *testing.T) {
+	var closes int
+	got := drainHostHTTPStreamBodyWithReader(func() (hostHTTPStreamRead, error) {
+		return hostHTTPStreamRead{}, fmt.Errorf("read failed")
+	}, func() {
+		closes++
+	}, 10)
+	if len(got) != 0 {
+		t.Fatalf("body = %q, want empty", got)
+	}
+	if closes != 1 {
+		t.Fatalf("close calls = %d, want 1", closes)
+	}
+}
+
+func TestNonSuccessStreamStartClassification(t *testing.T) {
+	if isNonSuccessStreamStart(200) || isNonSuccessStreamStart(204) || isNonSuccessStreamStart(0) {
+		t.Fatal("successful or unknown status treated as non-success")
+	}
+	if !isNonSuccessStreamStart(413) || !isNonSuccessStreamStart(500) {
+		t.Fatal("error status not treated as non-success")
 	}
 }
 
