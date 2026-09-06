@@ -93,6 +93,21 @@ the operator saves the provider editor. See
 [provider-model-routing.md](provider-model-routing.md) for what gets published and
 how CPA routes it.
 
+### Stale cache divergence
+
+The cache is a point-in-time snapshot and can drift from the config array. When the
+array is non-empty the cache is never read, so a stale cache is harmless while the
+array stands. The risk is the empty-array path: if the `models:` array is ever
+cleared or the provider block removed, the plugin falls back to whatever the cache
+last held, which may be an older model set (for example the pre-consolidation
+suffixed ids such as `gemini-3.8-flash-high`) rather than the current family ids.
+
+Operational rule: after changing the model set in the array, refresh the cache with
+"Fetch from endpoint" so the two agree, or clear the cache file so a future
+empty-array state cannot resurrect a stale list. A restart with a populated array
+always re-registers from the array, so configured models survive restarts; only the
+empty-array fallback depends on the cache.
+
 ## Rollback
 
 The plugin is opt-in and only mirrors a provider. To roll back:
