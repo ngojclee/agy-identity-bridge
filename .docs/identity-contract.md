@@ -187,3 +187,46 @@ Source:
 - `redactedIdentityLabel` and `debugIdentityFields` in `src/identity.go`
 - `src/management.go`
 - `src/providers.go`
+
+## Business MCP App Identity Contract Non-Dependency
+
+Assessed 2026-09-06 against Business MCP `app-identity-v2` and
+`remote-agent-relay-control-v1` at `contract_revision`
+`86436c88b4b8c7ffac9f4604b89599ec7e6c3dbd`.
+
+Conclusion: the plugin has **no dependency** on any value in those contracts. It
+deliberately does **not** pin `contract_revision`, log it at startup, or assert it
+in a test, because a pin for a value the plugin never reads would fail-closed on
+unrelated Hub churn and would be a pin for appearances.
+
+The plugin's identity mechanism is entirely its own: `X-AGY-*` headers plus an
+HMAC-SHA256 canonical payload verified by agy2api. It does not read, forward, or
+verify Business MCP app assertions, Ed25519 app identity, or Hub `app_id`.
+
+Value-by-value:
+
+| Contract value | Consumed by plugin? | Why |
+| --- | --- | --- |
+| `APP_ASSERTION_MAX_TTL_SECONDS` (300 ceiling) | No | The plugin issues no app assertion. Its `X-AGY-Timestamp` freshness is enforced by agy2api, not by this ceiling. |
+| `APP_ASSERTION_CLOCK_SKEW_SECONDS` (5) | No | The plugin does no assertion skew check. |
+| `configured_ttl_seconds`, `min_`/`max_configured_ttl_seconds` | No | Issuer bounds; the plugin never reads them, consistent with the "never bind to issuer bounds" rule. |
+| Assertion TTL (180), replay window (185) | No | No assertion, no replay cache in the plugin. |
+| Connector relay wait (165 -> 600) | No | The plugin sets no timeout of its own and derives none from the old 165 ceiling, so there is nothing to remove. CPA host HTTP bridge uses timeout 0 for plugin calls. |
+| `X-AGY-Connector-Id` | Different thing | This is the agy2api connector-binding label inside the canonical payload, not the Business MCP connector relay. Unrelated to `remote-agent-relay-control-v1`. |
+| `command_in_flight` busy code | No | The plugin forwards inference traffic and does not surface tool or command frames, so it never classifies this code. |
+| Cancel control frame, in-flight collision guard | No | Relay-control concerns outside the inference bridge. |
+
+Verification method (reproducible):
+
+- No non-test source file contains any `time.Second`, `time.Minute`, `Duration`,
+  `timeout`, `freshness`, or `max_age` constant. The plugin defines no durations.
+- No source file references `APP_ASSERTION`, `assertion`, `configured_ttl`,
+  `clock_skew`, `contract_revision`, `app_id`, `Ed25519`, `replay`, `relay`,
+  `command_in_flight`, or `busy`.
+- The only `connector` references are the `X-AGY-Connector-Id` header and its
+  canonical-payload field. The only `600`/`300` matches are a 600 KiB test buffer,
+  CSS `font-weight`, file mode `0600`, and HTTP `<300` status checks.
+
+If a future change makes the plugin consume any of these values, revisit this
+section and add the pin plus a startup log and a unit assertion at that time, not
+before.
