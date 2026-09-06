@@ -17,6 +17,8 @@ For a matched request the plugin:
 
 The plugin does not modify unrelated providers.
 
+Canonical contract and operations notes live in [.docs/README.md](.docs/README.md).
+
 Release 0.2.16 keeps the identity bridge canonical payload stable for agy2api
 while preserving the legacy signing fallback during the transition period and
 adds passive usage telemetry for the mirrored provider.
